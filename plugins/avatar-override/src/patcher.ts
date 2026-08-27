@@ -20,6 +20,8 @@ export const vstorage = storage as {
     allowedTagGuildIds: Record<string, boolean>; // guildId -> server tags from this guild are allowed to show (others are hidden). Empty = show all.
     guildHideAllStatus: Record<string, boolean>; // guildId -> every member of this guild shows as offline (everywhere — status is global, not per-guild, data)
     guildHomeHeaderOverrides: Record<string, string>; // guildId -> home/guide tab header image URL
+    hideProfileRoles: boolean; // hides every member's role list everywhere (profile, etc.)
+    hideRoleIcons: boolean; // hides the small role-icon badge (member.iconRoleId) everywhere
 };
 
 export const STORAGE_KEYS = [
@@ -38,6 +40,8 @@ export const STORAGE_KEYS = [
     "allowedTagGuildIds",
     "guildHideAllStatus",
     "guildHomeHeaderOverrides",
+    "hideProfileRoles",
+    "hideRoleIcons",
 ] as const;
 
 export const POOP_IMAGES = [
@@ -75,6 +79,8 @@ export default function patchOverrides() {
     vstorage.allowedTagGuildIds ??= {};
     vstorage.guildHideAllStatus ??= {};
     vstorage.guildHomeHeaderOverrides ??= {};
+    vstorage.hideProfileRoles ??= false;
+    vstorage.hideRoleIcons ??= false;
 
     // Every findByProps/findByStoreName lookup below is resolved here, inside
     // patchOverrides() (called at onLoad), rather than at module top-level.
@@ -314,6 +320,9 @@ export default function patchOverrides() {
 
             const nameOverride = !vstorage.bulkExceptions[userId] && vstorage.guildUserNameOverrides[guildId];
             if (nameOverride) member.nick = nameOverride;
+
+            if (vstorage.hideProfileRoles) member.roles = [];
+            if (vstorage.hideRoleIcons) member.iconRoleId = null;
         }),
 
         ChannelStore && after("getChannel", ChannelStore, ([id], channel) => {

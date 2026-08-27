@@ -496,7 +496,10 @@ const allowedTagsConfig: ToggleSectionConfig = {
 
 function exportSnapshot() {
     const snapshot: Record<string, unknown> = {};
-    for (const key of STORAGE_KEYS) snapshot[key] = vstorage[key] ?? {};
+    for (const key of STORAGE_KEYS) {
+        const value = vstorage[key];
+        snapshot[key] = typeof value === "boolean" ? value : value ?? {};
+    }
     return JSON.stringify(snapshot, null, 2);
 }
 
@@ -530,7 +533,9 @@ function BackupSection() {
 
         for (const key of STORAGE_KEYS) {
             const value = parsed[key];
-            if (value && typeof value === "object") vstorage[key] = value as never;
+            if (typeof value === "boolean" || (value && typeof value === "object")) {
+                vstorage[key] = value as never;
+            }
         }
 
         setError("");
@@ -610,6 +615,22 @@ export default function Settings() {
             <OverrideSection config={guildNameConfig} />
             <OverrideSection config={channelNameConfig} />
             <OverrideSection config={guildChannelBulkRenameConfig} />
+
+            <FormSection title="ロール表示">
+                <FormSwitchRow
+                    label="プロフィールのロールを非表示にする"
+                    subLabel="プロフィール画面などに表示されるロール一覧を、全サーバーで表示しないようにします"
+                    value={vstorage.hideProfileRoles}
+                    onValueChange={(value: boolean) => { vstorage.hideProfileRoles = value; }}
+                />
+                <FormSwitchRow
+                    label="ロールアイコンを非表示にする"
+                    subLabel="ユーザー名の横などに表示されるロールアイコンを、全サーバーで表示しないようにします"
+                    value={vstorage.hideRoleIcons}
+                    onValueChange={(value: boolean) => { vstorage.hideRoleIcons = value; }}
+                />
+            </FormSection>
+
             <ToggleListSection config={roleColorConfig} />
             <ToggleListSection config={hiddenStatusConfig} />
 
