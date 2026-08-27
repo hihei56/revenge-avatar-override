@@ -23,6 +23,7 @@ export const vstorage = storage as {
     hideProfileRoles: boolean; // hides every member's role list everywhere (profile, etc.)
     hideRoleIcons: boolean; // hides the small role-icon badge (member.iconRoleId) everywhere
     roleDisplayExceptions: Record<string, boolean>; // userId -> excluded from hideProfileRoles/hideRoleIcons above
+    guildBannerOverrides: Record<string, string>; // guildId -> wide banner image shown above the server name in the channel list
 };
 
 export const STORAGE_KEYS = [
@@ -44,6 +45,7 @@ export const STORAGE_KEYS = [
     "hideProfileRoles",
     "hideRoleIcons",
     "roleDisplayExceptions",
+    "guildBannerOverrides",
 ] as const;
 
 export const POOP_IMAGES = [
@@ -84,6 +86,7 @@ export default function patchOverrides() {
     vstorage.hideProfileRoles ??= false;
     vstorage.hideRoleIcons ??= false;
     vstorage.roleDisplayExceptions ??= {};
+    vstorage.guildBannerOverrides ??= {};
 
     // Every findByProps/findByStoreName lookup below is resolved here, inside
     // patchOverrides() (called at onLoad), rather than at module top-level.
@@ -198,6 +201,7 @@ export default function patchOverrides() {
     // URIs regardless of which internal function produced them.
     const GUILD_ICON_URI_RE = /(?:cdn\.discordapp\.com|media\.discordapp\.net)\/icons\/(\d{15,25})\//;
     const GUILD_HOME_HEADER_URI_RE = /(?:cdn\.discordapp\.com|media\.discordapp\.net)\/guilds\/(\d{15,25})\/home-headers\//;
+    const GUILD_BANNER_URI_RE = /(?:cdn\.discordapp\.com|media\.discordapp\.net)\/banners\/(\d{15,25})\//;
 
     const unpatches = [
         typeof RN?.Image === "function" && before("Image", RN, ([props]: [any]) => {
@@ -211,8 +215,13 @@ export default function patchOverrides() {
             // this feature, before ever touching a regex.
             const hasIconOverrides = Object.keys(vstorage.guildIconOverrides).length > 0;
             const hasHeaderOverrides = Object.keys(vstorage.guildHomeHeaderOverrides).length > 0;
-            if (!hasIconOverrides && !hasHeaderOverrides) return;
-            if (uri.indexOf("/icons/") === -1 && uri.indexOf("/home-headers/") === -1) return;
+            const hasBannerOverrides = Object.keys(vstorage.guildBannerOverrides).length > 0;
+            if (!hasIconOverrides && !hasHeaderOverrides && !hasBannerOverrides) return;
+            if (
+                uri.indexOf("/icons/") === -1
+                && uri.indexOf("/home-headers/") === -1
+                && uri.indexOf("/banners/") === -1
+            ) return;
 
             if (hasIconOverrides) {
                 const iconMatch = uri.match(GUILD_ICON_URI_RE);
@@ -227,6 +236,14 @@ export default function patchOverrides() {
                 const headerOverride = headerMatch && homeHeaderFor(headerMatch[1]);
                 if (headerOverride) {
                     return [{ ...props, source: { ...props.source, uri: headerOverride } }];
+                }
+            }
+
+            if (hasBannerOverrides) {
+                const bannerMatch = uri.match(GUILD_BANNER_URI_RE);
+                const bannerOverride = bannerMatch && vstorage.guildBannerOverrides[bannerMatch[1]];
+                if (bannerOverride) {
+                    return [{ ...props, source: { ...props.source, uri: bannerOverride } }];
                 }
             }
         }),
@@ -294,6 +311,21 @@ export default function patchOverrides() {
             const guildId = extractGuildId(first);
             debugIconArg("getGuildIconSource", first, guildId);
             const override = guildId && vstorage.guildIconOverrides[guildId];
+            return override ? { uri: override } : undefined;
+        }),
+
+        // Wide banner shown above the server name in the channel list drawer
+        // (guild.banner) — separate from both the guild icon and the
+        // home/guide tab header.
+        typeof guildIconUtils?.getGuildBannerURL === "function" && after("getGuildBannerURL", guildIconUtils, ([first]) => {
+            const guildId = extractGuildId(first);
+            const override = guildId && vstorage.guildBannerOverrides[guildId];
+            return override || undefined;
+        }),
+
+        typeof guildIconUtils?.getGuildBannerSource === "function" && after("getGuildBannerSource", guildIconUtils, ([first]) => {
+            const guildId = extractGuildId(first);
+            const override = guildId && vstorage.guildBannerOverrides[guildId];
             return override ? { uri: override } : undefined;
         }),
 

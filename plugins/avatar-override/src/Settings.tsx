@@ -60,7 +60,8 @@ type StoreKey =
     | "guildChannelBulkRename"
     | "guildUserIconOverrides"
     | "guildUserNameOverrides"
-    | "guildHomeHeaderOverrides";
+    | "guildHomeHeaderOverrides"
+    | "guildBannerOverrides";
 
 const setEntry = (key: StoreKey, id: string, value: string) => {
     vstorage[key] = { ...vstorage[key], [id]: value.trim() };
@@ -289,6 +290,20 @@ const guildIconConfig: SectionConfig = {
     idPlaceholder: "例: 123456789012345678",
     valueLabel: "画像URL",
     valuePlaceholder: "https://example.com/icon.png",
+    isImage: true,
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
+// The wide banner image shown above the server name in the channel list
+// drawer (guild.banner) — distinct from the guild icon (small circular
+// avatar) and the home/guide tab header (guildHomeHeaderOverrides).
+const guildBannerConfig: SectionConfig = {
+    storeKey: "guildBannerOverrides",
+    sectionTitle: "サーバーバナー画像を追加",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    valueLabel: "画像URL",
+    valuePlaceholder: "https://example.com/banner.png",
     isImage: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
@@ -620,6 +635,7 @@ export default function Settings() {
             <OverrideSection config={avatarConfig} />
             <OverrideSection config={nameConfig} />
             <OverrideSection config={guildIconConfig} />
+            <OverrideSection config={guildBannerConfig} />
             <OverrideSection config={guildHomeHeaderConfig} />
             <OverrideSection config={guildNameConfig} />
             <OverrideSection config={channelNameConfig} />
