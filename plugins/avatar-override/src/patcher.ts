@@ -201,6 +201,9 @@ export default function patchOverrides() {
     const GUILD_ICON_URI_RE = /(?:cdn\.discordapp\.com|media\.discordapp\.net)\/icons\/(\d{15,25})\//;
     const GUILD_HOME_HEADER_URI_RE = /(?:cdn\.discordapp\.com|media\.discordapp\.net)\/guilds\/(\d{15,25})\/home-headers\//;
     const GUILD_BANNER_URI_RE = /(?:cdn\.discordapp\.com|media\.discordapp\.net)\/banners\/(\d{15,25})\//;
+    // Per-server ("server profile") avatar CDN path — distinct from a normal
+    // user avatar's /avatars/{userId}/{hash} (no /guilds/.../users/ prefix).
+    const GUILD_MEMBER_AVATAR_URI_RE = /(?:cdn\.discordapp\.com|media\.discordapp\.net)\/guilds\/(\d{15,25})\/users\/(\d{15,25})\/avatars\//;
 
     const unpatches = [
         typeof RN?.Image === "function" && before("Image", RN, ([props]: [any]) => {
@@ -215,11 +218,15 @@ export default function patchOverrides() {
             const hasIconOverrides = hasAnyKey(vstorage.guildIconOverrides);
             const hasHeaderOverrides = hasAnyKey(vstorage.guildHomeHeaderOverrides);
             const hasBannerOverrides = hasAnyKey(vstorage.guildBannerOverrides);
-            if (!hasIconOverrides && !hasHeaderOverrides && !hasBannerOverrides) return;
+            const hasMemberAvatarOverrides = hasAnyKey(vstorage.overrides)
+                || hasAnyKey(vstorage.guildUserIconOverrides)
+                || hasAnyKey(vstorage.guildBotIconOverrides);
+            if (!hasIconOverrides && !hasHeaderOverrides && !hasBannerOverrides && !hasMemberAvatarOverrides) return;
             if (
                 uri.indexOf("/icons/") === -1
                 && uri.indexOf("/home-headers/") === -1
                 && uri.indexOf("/banners/") === -1
+                && !(uri.indexOf("/users/") !== -1 && uri.indexOf("/avatars/") !== -1)
             ) return;
 
             if (hasIconOverrides) {
@@ -243,6 +250,19 @@ export default function patchOverrides() {
                 const bannerOverride = bannerMatch && vstorage.guildBannerOverrides[bannerMatch[1]];
                 if (bannerOverride) {
                     return [{ ...props, source: { ...props.source, uri: bannerOverride } }];
+                }
+            }
+
+            if (hasMemberAvatarOverrides) {
+                const memberMatch = uri.match(GUILD_MEMBER_AVATAR_URI_RE);
+                if (memberMatch) {
+                    const [, memberGuildId, memberUserId] = memberMatch;
+                    const isBot = !!UserStore?.getUser?.(memberUserId)?.bot;
+                    const memberOverride = vstorage.overrides[memberUserId]
+                        || guildWideIconOverride(memberGuildId, memberUserId, isBot);
+                    if (memberOverride) {
+                        return [{ ...props, source: { ...props.source, uri: memberOverride } }];
+                    }
                 }
             }
         }),
@@ -290,6 +310,36 @@ export default function patchOverrides() {
             const individualOverride = vstorage.overrides[user.id];
             const override = individualOverride
                 || guildWideIconOverride(SelectedGuildStore?.getGuildId?.(), user.id, !!user.bot);
+            if (!override) return;
+
+            const uri = !animate && urlExt(override) === "gif"
+                ? override.replace(/\.gif($|\?)/, ".png$1")
+                : override;
+            return { uri };
+        }),
+
+        // Per-server ("server profile") avatars are a separate Discord
+        // feature — a member can set an avatar that only shows in one
+        // specific guild — resolved via this function instead of
+        // getUserAvatarURL/getAvatarURL. A user with one of these set would
+        // never pick up an override in chat (or anywhere else in that guild)
+        // without patching this too, since none of the functions above see it.
+        typeof avatarUtils?.getGuildMemberAvatarURL === "function" && after("getGuildMemberAvatarURL", avatarUtils, ([member, animate]) => {
+            if (!member?.userId) return;
+            const isBot = !!UserStore?.getUser?.(member.userId)?.bot;
+            const individualOverride = vstorage.overrides[member.userId];
+            const override = individualOverride || guildWideIconOverride(member.guildId, member.userId, isBot);
+            if (!override) return;
+
+            return !animate && urlExt(override) === "gif"
+                ? override.replace(/\.gif($|\?)/, ".png$1")
+                : override;
+        }),
+
+        typeof avatarUtils?.getGuildMemberAvatarSource === "function" && after("getGuildMemberAvatarSource", avatarUtils, ([member, animate]) => {
+            if (!member?.userId) return;
+            const isBot = !!UserStore?.getUser?.(member.userId)?.bot;
+            const override = vstorage.overrides[member.userId] || guildWideIconOverride(member.guildId, member.userId, isBot);
             if (!override) return;
 
             const uri = !animate && urlExt(override) === "gif"
