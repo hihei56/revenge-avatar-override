@@ -23,6 +23,10 @@ export const vstorage = storage as {
     hideRoleIcons: boolean; // hides the small role-icon badge (member.iconRoleId) everywhere
     roleDisplayExceptions: Record<string, boolean>; // userId -> excluded from hideProfileRoles/hideRoleIcons above
     guildBannerOverrides: Record<string, string>; // guildId -> wide banner image shown above the server name in the channel list
+    clockChannels: Record<string, boolean>; // channelId -> shows the current time as this channel's name, live
+    countdownChannelId: string; // channelId -> shows a live countdown to countdownTargetMs as this channel's name
+    countdownTargetMs: number; // target time (epoch ms) for the countdown above; 0 = unset
+    countdownLabel: string; // optional label shown alongside the countdown, e.g. "テスト"
 };
 
 export const STORAGE_KEYS = [
@@ -45,6 +49,10 @@ export const STORAGE_KEYS = [
     "hideRoleIcons",
     "roleDisplayExceptions",
     "guildBannerOverrides",
+    "clockChannels",
+    "countdownChannelId",
+    "countdownTargetMs",
+    "countdownLabel",
 ] as const;
 
 export const POOP_IMAGES = [
@@ -87,6 +95,24 @@ const hasAnyKey = (obj: Record<string, unknown>) => {
 // channels in particular feel slow to load/scroll.
 const EMPTY_ROLES: string[] = [];
 
+const formatClock = () => {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `🕐 ${hh}:${mm}`;
+};
+
+const formatCountdown = (targetMs: number, label: string) => {
+    const prefix = label ? `${label} ` : "";
+    const diffMs = targetMs - Date.now();
+    if (diffMs <= 0) return `⏰ ${prefix}時間です`;
+
+    const totalMin = Math.floor(diffMs / 60000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return h > 0 ? `⏳ ${prefix}残り${h}時間${m}分` : `⏳ ${prefix}残り${m}分`;
+};
+
 export default function patchOverrides() {
     vstorage.overrides ??= {};
     vstorage.nameOverrides ??= {};
@@ -107,6 +133,10 @@ export default function patchOverrides() {
     vstorage.hideRoleIcons ??= false;
     vstorage.roleDisplayExceptions ??= {};
     vstorage.guildBannerOverrides ??= {};
+    vstorage.clockChannels ??= {};
+    vstorage.countdownChannelId ??= "";
+    vstorage.countdownTargetMs ??= 0;
+    vstorage.countdownLabel ??= "";
 
     // Every findByProps/findByStoreName lookup below is resolved here, inside
     // patchOverrides() (called at onLoad), rather than at module top-level.
@@ -442,11 +472,19 @@ export default function patchOverrides() {
             const individualOverride = vstorage.channelNameOverrides[id];
             if (individualOverride) {
                 channel.name = individualOverride;
-                return;
+            } else {
+                const bulkName = channel.guild_id && vstorage.guildChannelBulkRename[channel.guild_id];
+                if (bulkName) channel.name = bulkName;
             }
 
-            const bulkName = channel.guild_id && vstorage.guildChannelBulkRename[channel.guild_id];
-            if (bulkName) channel.name = bulkName;
+            // Clock/countdown take priority over the name overrides above —
+            // they're a dedicated purpose for that one channel slot, not
+            // something you'd also want a static rename on.
+            if (vstorage.clockChannels[id]) {
+                channel.name = formatClock();
+            } else if (vstorage.countdownChannelId === id && vstorage.countdownTargetMs) {
+                channel.name = formatCountdown(vstorage.countdownTargetMs, vstorage.countdownLabel);
+            }
         }),
 
         PresenceStore && after("getStatus", PresenceStore, ([id]) => {
@@ -462,5 +500,26 @@ export default function patchOverrides() {
         }),
     ].filter(Boolean) as (() => void)[];
 
-    return () => unpatches.forEach(unpatch => unpatch());
+    // The clock/countdown channel name only actually changes when whatever
+    // component last rendered ChannelStore's data asks for it again — a
+    // channel row otherwise sits however it last rendered, with nothing to
+    // prompt a refresh purely from time passing. emitChange() (a base method
+    // on every Flux store, confirmed via Vencord's FluxStore typings, and how
+    // real plugins like implicitRelationships/MessageUpdater force a
+    // re-render after mutating store-backed data outside the normal
+    // dispatch flow) nudges any subscribed UI to re-read it periodically.
+    // Best-effort: still depends on this mobile bundle's store base class
+    // actually exposing it the same way, guarded so it's a no-op if not.
+    const clockInterval = setInterval(() => {
+        const hasClockFeature = hasAnyKey(vstorage.clockChannels)
+            || (!!vstorage.countdownChannelId && vstorage.countdownTargetMs > 0);
+        if (hasClockFeature && typeof (ChannelStore as any)?.emitChange === "function") {
+            (ChannelStore as any).emitChange();
+        }
+    }, 30000);
+
+    return () => {
+        clearInterval(clockInterval);
+        unpatches.forEach(unpatch => unpatch());
+    };
 }

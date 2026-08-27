@@ -383,13 +383,22 @@ const guildChannelBulkRenameConfig: SectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
+const clockChannelsConfig: ToggleSectionConfig = {
+    storeKey: "clockChannels",
+    sectionTitle: "時計チャンネルを追加",
+    idLabel: "チャンネルID",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => ChannelStore?.getChannel?.(id)?.name ?? id,
+};
+
 type ToggleStoreKey =
     | "roleColorDisabled"
     | "hiddenStatusUsers"
     | "bulkExceptions"
     | "allowedTagGuildIds"
     | "guildHideAllStatus"
-    | "roleDisplayExceptions";
+    | "roleDisplayExceptions"
+    | "clockChannels";
 
 interface ToggleSectionConfig {
     storeKey: ToggleStoreKey;
@@ -518,11 +527,14 @@ const allowedTagsConfig: ToggleSectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
+const isPrimitiveStorageValue = (value: unknown) =>
+    typeof value === "boolean" || typeof value === "string" || typeof value === "number";
+
 function exportSnapshot() {
     const snapshot: Record<string, unknown> = {};
     for (const key of STORAGE_KEYS) {
         const value = vstorage[key];
-        snapshot[key] = typeof value === "boolean" ? value : value ?? {};
+        snapshot[key] = isPrimitiveStorageValue(value) ? value : value ?? {};
     }
     return JSON.stringify(snapshot, null, 2);
 }
@@ -557,7 +569,7 @@ function BackupSection() {
 
         for (const key of STORAGE_KEYS) {
             const value = parsed[key];
-            if (typeof value === "boolean" || (value && typeof value === "object")) {
+            if (isPrimitiveStorageValue(value) || (value && typeof value === "object")) {
                 vstorage[key] = value as never;
             }
         }
@@ -619,6 +631,104 @@ function BackupSection() {
     );
 }
 
+function parseDateTimeInput(text: string): number | undefined {
+    const m = text.trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/);
+    if (!m) return undefined;
+    const [, y, mo, d, h, mi] = m.map(Number);
+    const date = new Date(y, mo - 1, d, h, mi);
+    return Number.isNaN(date.getTime()) ? undefined : date.getTime();
+}
+
+function formatDateTimeForInput(ms: number): string {
+    const d = new Date(ms);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function CountdownSection() {
+    useProxy(vstorage);
+
+    const [channelIdInput, setChannelIdInput] = React.useState(vstorage.countdownChannelId);
+    const [dateInput, setDateInput] = React.useState(
+        vstorage.countdownTargetMs ? formatDateTimeForInput(vstorage.countdownTargetMs) : "",
+    );
+    const [labelInput, setLabelInput] = React.useState(vstorage.countdownLabel);
+    const [error, setError] = React.useState("");
+
+    const save = () => {
+        const id = channelIdInput.trim();
+        if (id && !/^\d{15,25}$/.test(id)) {
+            setError("チャンネルIDが正しくありません (数字のみ・15〜25桁)");
+            return;
+        }
+        const targetMs = parseDateTimeInput(dateInput);
+        if (dateInput.trim() && targetMs === undefined) {
+            setError("日時の形式が正しくありません (例: 2026-08-27 15:00)");
+            return;
+        }
+
+        vstorage.countdownChannelId = id;
+        vstorage.countdownTargetMs = targetMs ?? 0;
+        vstorage.countdownLabel = labelInput.trim();
+        setError("");
+        showToast("カウントダウンを設定しました", getAssetIDByName("CircleCheckIcon-primary"));
+    };
+
+    const clear = () => {
+        vstorage.countdownChannelId = "";
+        vstorage.countdownTargetMs = 0;
+        vstorage.countdownLabel = "";
+        setChannelIdInput("");
+        setDateInput("");
+        setLabelInput("");
+        showToast("カウントダウンを解除しました", getAssetIDByName("CircleCheckIcon-primary"));
+    };
+
+    return (
+        <FormSection title="予定までのカウントダウン">
+            <FormText style={{ paddingHorizontal: 16, paddingBottom: 8, color: semanticColors.TEXT_MUTED }}>
+                指定したチャンネルの名前に、指定した日時までの残り時間を表示します (例: ⏳ 残り2時間15分)。
+            </FormText>
+            <FormInput
+                title="チャンネルID"
+                placeholder="例: 123456789012345678"
+                value={channelIdInput}
+                keyboardType="numeric"
+                onChange={(text: string) => setChannelIdInput(text)}
+            />
+            <FormInput
+                title="予定日時"
+                placeholder="2026-08-27 15:00"
+                value={dateInput}
+                onChange={(text: string) => setDateInput(text)}
+            />
+            <FormInput
+                title="ラベル (任意)"
+                placeholder="例: テスト"
+                value={labelInput}
+                onChange={(text: string) => setLabelInput(text)}
+            />
+            {!!error && (
+                <FormText style={{ color: semanticColors.TEXT_FEEDBACK_CRITICAL, paddingHorizontal: 16, paddingBottom: 8 }}>
+                    {error}
+                </FormText>
+            )}
+            <FormRow
+                label="保存する"
+                leading={<FormRow.Icon source={getAssetIDByName("CircleCheckIcon-primary")} />}
+                onPress={save}
+            />
+            {!!vstorage.countdownTargetMs && (
+                <FormRow
+                    label="解除する"
+                    leading={<FormRow.Icon source={getAssetIDByName("TrashIcon")} />}
+                    onPress={clear}
+                />
+            )}
+        </FormSection>
+    );
+}
+
 export default function Settings() {
     useProxy(vstorage);
 
@@ -640,6 +750,13 @@ export default function Settings() {
             <OverrideSection config={guildNameConfig} />
             <OverrideSection config={channelNameConfig} />
             <OverrideSection config={guildChannelBulkRenameConfig} />
+            <ToggleListSection config={clockChannelsConfig} />
+            <FormSection title="時計チャンネルについて">
+                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                    登録したチャンネルの名前が、常に現在時刻 (例: 🕐 14:32) に置き換わります。個別のチャンネル名指定より優先されます。表示は約30秒ごとに更新を試みますが、Discord側の再描画のタイミング次第で数十秒〜数分ずれることがあります。
+                </FormText>
+            </FormSection>
+            <CountdownSection />
 
             <FormSection title="ロール表示">
                 <FormSwitchRow
