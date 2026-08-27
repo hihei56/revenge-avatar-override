@@ -1,4 +1,4 @@
-import { findByStoreName } from "@vendetta/metro";
+import { findByProps, findByStoreName } from "@vendetta/metro";
 import { clipboard, React, ReactNative as RN } from "@vendetta/metro/common";
 import { useProxy } from "@vendetta/storage";
 import { semanticColors } from "@vendetta/ui";
@@ -13,6 +13,42 @@ const { FormRow, FormSection, FormText, FormInput, FormSwitchRow } = Forms;
 const UserStore = findByStoreName("UserStore");
 const GuildStore = findByStoreName("GuildStore");
 const ChannelStore = findByStoreName("ChannelStore");
+
+// Same document-picker lookup used by other Revenge plugins (e.g. monet-theme's
+// AddBackgroundSheet) to let the user pick an image from the device. The
+// resulting file:// path is used directly as the "URL" — it renders fine
+// locally, but (unlike a real CDN link) only works on this device.
+const DocumentPicker = findByProps("pickSingle", "isCancel");
+const DocumentsNew = findByProps("pick", "saveDocuments");
+
+async function pickImageFile(): Promise<string | undefined> {
+    try {
+        if (DocumentPicker) {
+            const file = await DocumentPicker.pickSingle({
+                type: DocumentPicker.types.images,
+                mode: "import",
+                copyTo: "documentDirectory",
+            });
+            if (file.fileCopyUri) return `file://${file.fileCopyUri}`;
+        } else if (DocumentsNew) {
+            const [picked] = await DocumentsNew.pick({
+                type: DocumentsNew.types.images,
+                allowVirtualFiles: true,
+                mode: "import",
+            });
+            if (picked?.uri) {
+                const [result] = await DocumentsNew.keepLocalCopy({
+                    files: [{ fileName: picked.name ?? "image", uri: picked.uri }],
+                    destination: "documentDirectory",
+                });
+                if (result?.status === "success") return `file://${result.localUri}`;
+            }
+        }
+    } catch {
+        // user cancelled the picker, or it's unavailable on this build
+    }
+    return undefined;
+}
 
 type StoreKey =
     | "overrides"
@@ -99,6 +135,20 @@ function AddRow({ config }: { config: SectionConfig }) {
                     setError("");
                 }}
             />
+            {config.isImage && (
+                <FormRow
+                    label="端末から画像を選択"
+                    subLabel="この端末専用になります (他の端末には反映されません)"
+                    leading={<FormRow.Icon source={getAssetIDByName("ImageIcon")} />}
+                    onPress={async () => {
+                        const path = await pickImageFile();
+                        if (path) {
+                            setValue(path);
+                            setError("");
+                        }
+                    }}
+                />
+            )}
             {!!error && (
                 <FormText style={{ color: semanticColors.TEXT_FEEDBACK_CRITICAL, paddingHorizontal: 16, paddingBottom: 8 }}>
                     {error}
@@ -128,6 +178,16 @@ function EntryRow({ config, id, value }: { config: SectionConfig; id: string; va
                     value={draft}
                     onChange={setDraft}
                 />
+                {config.isImage && (
+                    <FormRow
+                        label="端末から画像を選択"
+                        leading={<FormRow.Icon source={getAssetIDByName("ImageIcon")} />}
+                        onPress={async () => {
+                            const path = await pickImageFile();
+                            if (path) setDraft(path);
+                        }}
+                    />
+                )}
                 <FormRow
                     label="保存"
                     leading={<FormRow.Icon source={getAssetIDByName("CircleCheckIcon-primary")} />}
