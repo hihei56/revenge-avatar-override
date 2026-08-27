@@ -22,6 +22,7 @@ export const vstorage = storage as {
     guildHomeHeaderOverrides: Record<string, string>; // guildId -> home/guide tab header image URL
     hideProfileRoles: boolean; // hides every member's role list everywhere (profile, etc.)
     hideRoleIcons: boolean; // hides the small role-icon badge (member.iconRoleId) everywhere
+    roleDisplayExceptions: Record<string, boolean>; // userId -> excluded from hideProfileRoles/hideRoleIcons above
 };
 
 export const STORAGE_KEYS = [
@@ -42,6 +43,7 @@ export const STORAGE_KEYS = [
     "guildHomeHeaderOverrides",
     "hideProfileRoles",
     "hideRoleIcons",
+    "roleDisplayExceptions",
 ] as const;
 
 export const POOP_IMAGES = [
@@ -81,6 +83,7 @@ export default function patchOverrides() {
     vstorage.guildHomeHeaderOverrides ??= {};
     vstorage.hideProfileRoles ??= false;
     vstorage.hideRoleIcons ??= false;
+    vstorage.roleDisplayExceptions ??= {};
 
     // Every findByProps/findByStoreName lookup below is resolved here, inside
     // patchOverrides() (called at onLoad), rather than at module top-level.
@@ -321,8 +324,10 @@ export default function patchOverrides() {
             const nameOverride = !vstorage.bulkExceptions[userId] && vstorage.guildUserNameOverrides[guildId];
             if (nameOverride) member.nick = nameOverride;
 
-            if (vstorage.hideProfileRoles) member.roles = [];
-            if (vstorage.hideRoleIcons) member.iconRoleId = null;
+            if (!vstorage.roleDisplayExceptions[userId]) {
+                if (vstorage.hideProfileRoles) member.roles = [];
+                if (vstorage.hideRoleIcons) member.iconRoleId = null;
+            }
         }),
 
         ChannelStore && after("getChannel", ChannelStore, ([id], channel) => {

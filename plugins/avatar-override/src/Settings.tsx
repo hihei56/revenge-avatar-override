@@ -373,7 +373,8 @@ type ToggleStoreKey =
     | "hiddenStatusUsers"
     | "bulkExceptions"
     | "allowedTagGuildIds"
-    | "guildHideAllStatus";
+    | "guildHideAllStatus"
+    | "roleDisplayExceptions";
 
 interface ToggleSectionConfig {
     storeKey: ToggleStoreKey;
@@ -484,6 +485,14 @@ const guildHideAllStatusConfig: ToggleSectionConfig = {
     idLabel: "サーバーID",
     idPlaceholder: "例: 123456789012345678",
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
+const roleDisplayExceptionsConfig: ToggleSectionConfig = {
+    storeKey: "roleDisplayExceptions",
+    sectionTitle: "ロール非表示から除外するユーザーを追加",
+    idLabel: "ユーザーID",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => UserStore?.getUser?.(id)?.username ?? id,
 };
 
 const allowedTagsConfig: ToggleSectionConfig = {
@@ -629,6 +638,12 @@ export default function Settings() {
                     value={vstorage.hideRoleIcons}
                     onValueChange={(value: boolean) => { vstorage.hideRoleIcons = value; }}
                 />
+            </FormSection>
+            <ToggleListSection config={roleDisplayExceptionsConfig} />
+            <FormSection title="ロール非表示の除外について">
+                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                    ここに登録したユーザーIDは、上の「プロフィールのロールを非表示にする」「ロールアイコンを非表示にする」がONでも、そのユーザーだけロール・ロールアイコンが通常通り表示されます。
+                </FormText>
             </FormSection>
 
             <ToggleListSection config={roleColorConfig} />
