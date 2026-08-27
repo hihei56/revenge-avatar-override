@@ -16,6 +16,7 @@ export const vstorage = storage as {
     guildUserNameOverrides: Record<string, string>; // guildId -> display name applied to all non-excepted members in that guild
     bulkExceptions: Record<string, boolean>; // userId -> excluded from every guild-wide bulk override above
     allowedTagGuildIds: Record<string, boolean>; // guildId -> server tags from this guild are allowed to show (others are hidden). Empty = show all.
+    guildHideAllStatus: Record<string, boolean>; // guildId -> every member of this guild shows as offline (everywhere — status is global, not per-guild, data)
 };
 
 export const STORAGE_KEYS = [
@@ -32,6 +33,7 @@ export const STORAGE_KEYS = [
     "guildUserNameOverrides",
     "bulkExceptions",
     "allowedTagGuildIds",
+    "guildHideAllStatus",
 ] as const;
 
 export const POOP_IMAGES = [
@@ -67,6 +69,7 @@ export default function patchOverrides() {
     vstorage.guildUserNameOverrides ??= {};
     vstorage.bulkExceptions ??= {};
     vstorage.allowedTagGuildIds ??= {};
+    vstorage.guildHideAllStatus ??= {};
 
     // Every findByProps/findByStoreName lookup below is resolved here, inside
     // patchOverrides() (called at onLoad), rather than at module top-level.
@@ -229,6 +232,14 @@ export default function patchOverrides() {
 
         PresenceStore && after("getStatus", PresenceStore, ([id]) => {
             if (vstorage.hiddenStatusUsers[id]) return "offline";
+
+            // Presence is global (not per-guild) data, so making everyone in a
+            // guild show as offline means checking membership in every guild
+            // that has the toggle on. This also means an affected user shows
+            // as offline everywhere (DMs, other guilds), not just that server.
+            for (const guildId in vstorage.guildHideAllStatus) {
+                if (vstorage.guildHideAllStatus[guildId] && isRealMember(guildId, id)) return "offline";
+            }
         }),
     ].filter(Boolean) as (() => void)[];
 

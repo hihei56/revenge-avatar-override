@@ -356,7 +356,12 @@ const guildChannelBulkRenameConfig: SectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
-type ToggleStoreKey = "roleColorDisabled" | "hiddenStatusUsers" | "bulkExceptions" | "allowedTagGuildIds";
+type ToggleStoreKey =
+    | "roleColorDisabled"
+    | "hiddenStatusUsers"
+    | "bulkExceptions"
+    | "allowedTagGuildIds"
+    | "guildHideAllStatus";
 
 interface ToggleSectionConfig {
     storeKey: ToggleStoreKey;
@@ -459,6 +464,14 @@ const bulkExceptionsConfig: ToggleSectionConfig = {
     idLabel: "ユーザーID",
     idPlaceholder: "例: 123456789012345678",
     resolveLabel: id => UserStore?.getUser?.(id)?.username ?? id,
+};
+
+const guildHideAllStatusConfig: ToggleSectionConfig = {
+    storeKey: "guildHideAllStatus",
+    sectionTitle: "サーバー内全員をオフライン扱いにするサーバーを追加",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
 const allowedTagsConfig: ToggleSectionConfig = {
@@ -586,6 +599,13 @@ export default function Settings() {
             <OverrideSection config={guildChannelBulkRenameConfig} />
             <ToggleListSection config={roleColorConfig} />
             <ToggleListSection config={hiddenStatusConfig} />
+
+            <ToggleListSection config={guildHideAllStatusConfig} />
+            <FormSection title="サーバー内全員オフライン扱いについて">
+                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                    オンラインステータスはユーザーごとの共通データ (サーバーごとには分かれていません) のため、ここで登録したサーバーのメンバーは、そのサーバーに限らずDMや他のサーバーでも常にオフライン扱いになります。
+                </FormText>
+            </FormSection>
 
             <ToggleListSection config={bulkExceptionsConfig} />
             <FormSection title="除外ユーザーについて">
