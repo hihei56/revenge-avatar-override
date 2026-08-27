@@ -1,4 +1,3 @@
-import { logger } from "@vendetta";
 import { findByProps, findByStoreName } from "@vendetta/metro";
 import { ReactNative as RN } from "@vendetta/metro/common";
 import { after, before } from "@vendetta/patcher";
@@ -67,6 +66,16 @@ const urlExt = (url: string) => {
     }
 };
 
+// Checks for "does this map have any entries" without Object.keys()'s full
+// array allocation — several of these run on every single Image/avatar/guild
+// render in the whole app, so avoiding an allocation there (even a small,
+// short-lived one) on the overwhelmingly common "nothing configured" path
+// adds up under frequent re-renders (scrolling, opening the guild rail, etc.).
+const hasAnyKey = (obj: Record<string, unknown>) => {
+    for (const _k in obj) return true;
+    return false;
+};
+
 export default function patchOverrides() {
     vstorage.overrides ??= {};
     vstorage.nameOverrides ??= {};
@@ -100,11 +109,6 @@ export default function patchOverrides() {
     // safer point to resolve these.
     const avatarUtils = findByProps("getUserAvatarURL", "getUserAvatarSource");
     const guildIconUtils = findByProps("getGuildIconURL", "getGuildIconSource") ?? avatarUtils;
-    logger.log(
-        `[AvatarOverride] guildIconUtils found=${!!guildIconUtils} ` +
-        `getGuildIconURL=${typeof guildIconUtils?.getGuildIconURL} ` +
-        `getGuildIconSource=${typeof guildIconUtils?.getGuildIconSource}`,
-    );
     const UserStore = findByStoreName("UserStore");
     const GuildStore = findByStoreName("GuildStore");
     const GuildMemberStore = findByStoreName("GuildMemberStore");
@@ -152,23 +156,6 @@ export default function patchOverrides() {
         return undefined;
     };
 
-    // Whether an override for this guild icon is even configured is cheap to
-    // check, so this only logs when it could plausibly matter — once per
-    // distinct raw argument shape seen, to help diagnose reports of the
-    // override silently not applying without spamming logs on every render.
-    const loggedIconShapes = new Set<string>();
-    const debugIconArg = (label: string, first: unknown, guildId: string | undefined) => {
-        if (Object.keys(vstorage.guildIconOverrides).length === 0) return;
-        const shapeKey = `${label}:${typeof first}:${guildId ?? "none"}`;
-        if (loggedIconShapes.has(shapeKey)) return;
-        loggedIconShapes.add(shapeKey);
-        try {
-            logger.log(`[AvatarOverride] ${label} arg=${JSON.stringify(first)} resolvedGuildId=${guildId}`);
-        } catch {
-            logger.log(`[AvatarOverride] ${label} arg=<unserializable ${typeof first}> resolvedGuildId=${guildId}`);
-        }
-    };
-
     // Shared by both the guild-aware instance methods and the plain
     // module-level avatar functions (using the currently-viewed guild as a
     // best-effort stand-in for the latter).
@@ -213,9 +200,9 @@ export default function patchOverrides() {
             // it needs to bail out as cheaply as possible for the
             // overwhelming majority of calls that have nothing to do with
             // this feature, before ever touching a regex.
-            const hasIconOverrides = Object.keys(vstorage.guildIconOverrides).length > 0;
-            const hasHeaderOverrides = Object.keys(vstorage.guildHomeHeaderOverrides).length > 0;
-            const hasBannerOverrides = Object.keys(vstorage.guildBannerOverrides).length > 0;
+            const hasIconOverrides = hasAnyKey(vstorage.guildIconOverrides);
+            const hasHeaderOverrides = hasAnyKey(vstorage.guildHomeHeaderOverrides);
+            const hasBannerOverrides = hasAnyKey(vstorage.guildBannerOverrides);
             if (!hasIconOverrides && !hasHeaderOverrides && !hasBannerOverrides) return;
             if (
                 uri.indexOf("/icons/") === -1
@@ -265,9 +252,8 @@ export default function patchOverrides() {
                 user.username = nameOverride;
             }
 
-            const allowedTags = vstorage.allowedTagGuildIds;
             const tagGuildId = user.primaryGuild?.identityGuildId;
-            if (tagGuildId && Object.keys(allowedTags).length > 0 && !allowedTags[tagGuildId]) {
+            if (tagGuildId && hasAnyKey(vstorage.allowedTagGuildIds) && !vstorage.allowedTagGuildIds[tagGuildId]) {
                 user.primaryGuild = null;
             }
         }),
@@ -302,14 +288,12 @@ export default function patchOverrides() {
 
         typeof guildIconUtils?.getGuildIconURL === "function" && after("getGuildIconURL", guildIconUtils, ([first]) => {
             const guildId = extractGuildId(first);
-            debugIconArg("getGuildIconURL", first, guildId);
             const override = guildId && vstorage.guildIconOverrides[guildId];
             return override || undefined;
         }),
 
         typeof guildIconUtils?.getGuildIconSource === "function" && after("getGuildIconSource", guildIconUtils, ([first]) => {
             const guildId = extractGuildId(first);
-            debugIconArg("getGuildIconSource", first, guildId);
             const override = guildId && vstorage.guildIconOverrides[guildId];
             return override ? { uri: override } : undefined;
         }),
