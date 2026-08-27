@@ -7,17 +7,19 @@ import { Forms } from "@vendetta/ui/components";
 
 import { pickRandomPoop, vstorage } from "./patcher";
 
-const { FormRow, FormSection, FormText, FormInput } = Forms;
+const { FormRow, FormSection, FormText, FormInput, FormSwitchRow } = Forms;
 
 const UserStore = findByStoreName("UserStore");
 const GuildStore = findByStoreName("GuildStore");
+const ChannelStore = findByStoreName("ChannelStore");
 
 type StoreKey =
     | "overrides"
     | "nameOverrides"
     | "guildIconOverrides"
     | "guildNameOverrides"
-    | "guildBotIconOverrides";
+    | "guildBotIconOverrides"
+    | "channelNameOverrides";
 
 const setEntry = (key: StoreKey, id: string, value: string) => {
     vstorage[key] = { ...vstorage[key], [id]: value.trim() };
@@ -247,6 +249,86 @@ const guildBotIconConfig: SectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
+const channelNameConfig: SectionConfig = {
+    storeKey: "channelNameOverrides",
+    sectionTitle: "チャンネル名を追加",
+    idLabel: "チャンネルID",
+    idPlaceholder: "例: 123456789012345678",
+    valueLabel: "チャンネル名",
+    valuePlaceholder: "表示させたいチャンネル名",
+    resolveLabel: id => ChannelStore?.getChannel?.(id)?.name ?? id,
+};
+
+function RoleColorSection() {
+    const [newId, setNewId] = React.useState("");
+    const [error, setError] = React.useState("");
+
+    const entries = Object.keys(vstorage.roleColorDisabled ?? {});
+
+    const addGuild = () => {
+        const id = newId.trim();
+        if (!/^\d{15,25}$/.test(id)) {
+            setError("サーバーIDが正しくありません (数字のみ・15〜25桁)");
+            return;
+        }
+        vstorage.roleColorDisabled = { ...vstorage.roleColorDisabled, [id]: true };
+        setNewId("");
+        setError("");
+    };
+
+    const removeGuild = (id: string) => {
+        const next = { ...vstorage.roleColorDisabled };
+        delete next[id];
+        vstorage.roleColorDisabled = next;
+    };
+
+    return (
+        <>
+            <FormSection title="ロールカラー無効化サーバーを追加">
+                <FormInput
+                    title="サーバーID"
+                    placeholder="例: 123456789012345678"
+                    value={newId}
+                    keyboardType="numeric"
+                    onChange={(text: string) => {
+                        setNewId(text);
+                        setError("");
+                    }}
+                />
+                {!!error && (
+                    <FormText style={{ color: semanticColors.TEXT_FEEDBACK_CRITICAL, paddingHorizontal: 16, paddingBottom: 8 }}>
+                        {error}
+                    </FormText>
+                )}
+                <FormRow
+                    label="追加する"
+                    leading={<FormRow.Icon source={getAssetIDByName("PlusLargeIcon")} />}
+                    onPress={addGuild}
+                />
+            </FormSection>
+            <FormSection title={`登録済み (${entries.length})`}>
+                {entries.length === 0 && (
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        まだ何も登録されていません
+                    </FormText>
+                )}
+                {entries.map(id => (
+                    <FormSwitchRow
+                        key={id}
+                        label={GuildStore?.getGuild?.(id)?.name ?? id}
+                        subLabel={`${id} (長押しでリストから削除)`}
+                        value={!!vstorage.roleColorDisabled[id]}
+                        onValueChange={(value: boolean) => {
+                            vstorage.roleColorDisabled = { ...vstorage.roleColorDisabled, [id]: value };
+                        }}
+                        onLongPress={() => removeGuild(id)}
+                    />
+                ))}
+            </FormSection>
+        </>
+    );
+}
+
 export default function Settings() {
     useProxy(vstorage);
 
@@ -262,6 +344,8 @@ export default function Settings() {
             <OverrideSection config={nameConfig} />
             <OverrideSection config={guildIconConfig} />
             <OverrideSection config={guildNameConfig} />
+            <OverrideSection config={channelNameConfig} />
+            <RoleColorSection />
 
             <FormSection title="実験的機能">
                 <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>

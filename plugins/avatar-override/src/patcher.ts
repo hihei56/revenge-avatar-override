@@ -8,6 +8,8 @@ export const vstorage = storage as {
     guildIconOverrides: Record<string, string>; // guildId -> icon URL
     guildNameOverrides: Record<string, string>; // guildId -> guild name
     guildBotIconOverrides: Record<string, string>; // guildId -> icon URL applied to all bot/webhook avatars in that guild
+    roleColorDisabled: Record<string, boolean>; // guildId -> role colors hidden in that guild
+    channelNameOverrides: Record<string, string>; // channelId -> channel name
 };
 
 export const POOP_IMAGES = [
@@ -25,6 +27,8 @@ const avatarUtils = findByProps("getUserAvatarURL", "getUserAvatarSource");
 const guildIconUtils = findByProps("getGuildIconURL", "getGuildIconSource") ?? avatarUtils;
 const UserStore = findByStoreName("UserStore");
 const GuildStore = findByStoreName("GuildStore");
+const GuildMemberStore = findByStoreName("GuildMemberStore");
+const ChannelStore = findByStoreName("ChannelStore");
 
 // The `User` record class exposes guild-aware `getAvatarURL(guildId, ...)` /
 // `getAvatarSource(guildId)` instance methods. Unlike the module-level
@@ -48,6 +52,8 @@ export default function patchOverrides() {
     vstorage.guildIconOverrides ??= {};
     vstorage.guildNameOverrides ??= {};
     vstorage.guildBotIconOverrides ??= {};
+    vstorage.roleColorDisabled ??= {};
+    vstorage.channelNameOverrides ??= {};
 
     const unpatches = [
         after("getUser", UserStore, ([id], user) => {
@@ -113,6 +119,18 @@ export default function patchOverrides() {
             if (!this?.bot || !guildId || vstorage.overrides[this.id]) return;
             const override = vstorage.guildBotIconOverrides[guildId];
             return override ? { uri: override } : undefined;
+        }),
+
+        GuildMemberStore && after("getMember", GuildMemberStore, ([guildId], member) => {
+            if (!member || !vstorage.roleColorDisabled[guildId]) return;
+            member.colorString = null;
+            member.colorRoleId = null;
+        }),
+
+        ChannelStore && after("getChannel", ChannelStore, ([id], channel) => {
+            if (!channel) return;
+            const override = vstorage.channelNameOverrides[id];
+            if (override) channel.name = override;
         }),
     ].filter(Boolean) as (() => void)[];
 
