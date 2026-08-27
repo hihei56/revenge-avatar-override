@@ -5,64 +5,86 @@ import { semanticColors } from "@vendetta/ui";
 import { getAssetIDByName } from "@vendetta/ui/assets";
 import { Forms } from "@vendetta/ui/components";
 
-import { vstorage } from "./patcher";
+import { pickRandomPoop, vstorage } from "./patcher";
 
 const { FormRow, FormSection, FormText, FormInput } = Forms;
 
 const UserStore = findByStoreName("UserStore");
+const GuildStore = findByStoreName("GuildStore");
 
-const setOverride = (userId: string, url: string) => {
-    vstorage.overrides = { ...vstorage.overrides, [userId]: url.trim() };
+type StoreKey = "overrides" | "nameOverrides" | "guildIconOverrides" | "guildNameOverrides";
+
+const setEntry = (key: StoreKey, id: string, value: string) => {
+    vstorage[key] = { ...vstorage[key], [id]: value.trim() };
 };
 
-const removeOverride = (userId: string) => {
-    const next = { ...vstorage.overrides };
-    delete next[userId];
-    vstorage.overrides = next;
+const removeEntry = (key: StoreKey, id: string) => {
+    const next = { ...vstorage[key] };
+    delete next[id];
+    vstorage[key] = next;
 };
 
-function AddSection() {
-    const [userId, setUserId] = React.useState("");
-    const [url, setUrl] = React.useState("");
+interface SectionConfig {
+    storeKey: StoreKey;
+    sectionTitle: string;
+    idLabel: string;
+    idPlaceholder: string;
+    valueLabel: string;
+    valuePlaceholder: string;
+    isImage?: boolean;
+    allowBlankRandomPoop?: boolean;
+    resolveLabel: (id: string) => string;
+}
+
+function AddRow({ config }: { config: SectionConfig }) {
+    const [id, setId] = React.useState("");
+    const [value, setValue] = React.useState("");
     const [error, setError] = React.useState("");
 
     const submit = () => {
-        const id = userId.trim();
-        const link = url.trim();
+        const trimmedId = id.trim();
+        let trimmedValue = value.trim();
 
-        if (!/^\d{15,25}$/.test(id)) {
-            setError("ユーザーIDが正しくありません (数字のみ・15〜25桁)");
-            return;
-        }
-        if (!link) {
-            setError("画像URLを入力してください");
+        if (!/^\d{15,25}$/.test(trimmedId)) {
+            setError("IDが正しくありません (数字のみ・15〜25桁)");
             return;
         }
 
-        setOverride(id, link);
-        setUserId("");
-        setUrl("");
+        if (!trimmedValue) {
+            if (config.allowBlankRandomPoop) {
+                trimmedValue = pickRandomPoop();
+            } else {
+                setError(`${config.valueLabel}を入力してください`);
+                return;
+            }
+        }
+
+        setEntry(config.storeKey, trimmedId, trimmedValue);
+        setId("");
+        setValue("");
         setError("");
     };
 
     return (
-        <FormSection title="ユーザーを追加">
+        <FormSection title={config.sectionTitle}>
             <FormInput
-                title="ユーザーID"
-                placeholder="例: 123456789012345678"
-                value={userId}
+                title={config.idLabel}
+                placeholder={config.idPlaceholder}
+                value={id}
                 keyboardType="numeric"
                 onChange={(text: string) => {
-                    setUserId(text);
+                    setId(text);
                     setError("");
                 }}
             />
             <FormInput
-                title="画像URL"
-                placeholder="https://example.com/avatar.png"
-                value={url}
+                title={config.valueLabel}
+                placeholder={config.allowBlankRandomPoop
+                    ? `${config.valuePlaceholder} (空欄でランダムなうんこ画像)`
+                    : config.valuePlaceholder}
+                value={value}
                 onChange={(text: string) => {
-                    setUrl(text);
+                    setValue(text);
                     setError("");
                 }}
             />
@@ -80,19 +102,18 @@ function AddSection() {
     );
 }
 
-function OverrideRow({ userId, url }: { userId: string; url: string }) {
+function EntryRow({ config, id, value }: { config: SectionConfig; id: string; value: string }) {
     const [editing, setEditing] = React.useState(false);
-    const [draft, setDraft] = React.useState(url);
+    const [draft, setDraft] = React.useState(value);
 
-    const user = UserStore?.getUser?.(userId);
-    const label = user?.username ?? userId;
+    const label = config.resolveLabel(id);
 
     if (editing) {
         return (
             <RN.View>
                 <FormInput
                     title={label}
-                    placeholder="https://example.com/avatar.png"
+                    placeholder={config.valuePlaceholder}
                     value={draft}
                     onChange={setDraft}
                 />
@@ -100,7 +121,7 @@ function OverrideRow({ userId, url }: { userId: string; url: string }) {
                     label="保存"
                     leading={<FormRow.Icon source={getAssetIDByName("CircleCheckIcon-primary")} />}
                     onPress={() => {
-                        if (draft.trim()) setOverride(userId, draft);
+                        if (draft.trim()) setEntry(config.storeKey, id, draft);
                         setEditing(false);
                     }}
                 />
@@ -113,7 +134,7 @@ function OverrideRow({ userId, url }: { userId: string; url: string }) {
                         />
                     }
                     onPress={() => {
-                        removeOverride(userId);
+                        removeEntry(config.storeKey, id);
                         setEditing(false);
                     }}
                 />
@@ -121,7 +142,7 @@ function OverrideRow({ userId, url }: { userId: string; url: string }) {
                     label="キャンセル"
                     leading={<FormRow.Icon source={getAssetIDByName("CircleXIcon-primary")} />}
                     onPress={() => {
-                        setDraft(url);
+                        setDraft(value);
                         setEditing(false);
                     }}
                 />
@@ -132,12 +153,16 @@ function OverrideRow({ userId, url }: { userId: string; url: string }) {
     return (
         <FormRow
             label={label}
-            subLabel={userId}
+            subLabel={config.isImage ? id : value}
             leading={
-                <RN.Image
-                    source={{ uri: url }}
-                    style={{ width: 32, height: 32, borderRadius: 16 }}
-                />
+                config.isImage
+                    ? (
+                        <RN.Image
+                            source={{ uri: value }}
+                            style={{ width: 32, height: 32, borderRadius: 16 }}
+                        />
+                    )
+                    : <FormRow.Icon source={getAssetIDByName("PencilIcon")} />
             }
             trailing={<FormRow.Arrow />}
             onPress={() => setEditing(true)}
@@ -145,31 +170,82 @@ function OverrideRow({ userId, url }: { userId: string; url: string }) {
     );
 }
 
-export default function Settings() {
-    useProxy(vstorage);
-
-    const entries = Object.entries(vstorage.overrides ?? {});
+function OverrideSection({ config }: { config: SectionConfig }) {
+    const entries = Object.entries(vstorage[config.storeKey] ?? {});
 
     return (
-        <RN.ScrollView style={{ flex: 1 }}>
-            <FormSection title="使い方">
-                <FormText style={{ padding: 16 }}>
-                    ユーザーIDと画像URLを登録すると、そのユーザーのアバターがあなたの端末上でのみ指定した画像に置き換わります。相手や他のユーザーには一切送信・共有されません。項目をタップすると編集・削除できます。
-                </FormText>
-            </FormSection>
-
-            <AddSection />
-
+        <>
+            <AddRow config={config} />
             <FormSection title={`登録済み (${entries.length})`}>
                 {entries.length === 0 && (
                     <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
                         まだ何も登録されていません
                     </FormText>
                 )}
-                {entries.map(([userId, url]) => (
-                    <OverrideRow key={userId} userId={userId} url={url} />
-                ))}
+                {entries.map(([id, value]) => <EntryRow key={id} config={config} id={id} value={value} />)}
             </FormSection>
+        </>
+    );
+}
+
+const avatarConfig: SectionConfig = {
+    storeKey: "overrides",
+    sectionTitle: "アバターを追加",
+    idLabel: "ユーザーID",
+    idPlaceholder: "例: 123456789012345678",
+    valueLabel: "画像URL",
+    valuePlaceholder: "https://example.com/avatar.png",
+    isImage: true,
+    allowBlankRandomPoop: true,
+    resolveLabel: id => UserStore?.getUser?.(id)?.username ?? id,
+};
+
+const nameConfig: SectionConfig = {
+    storeKey: "nameOverrides",
+    sectionTitle: "ユーザー名を追加",
+    idLabel: "ユーザーID",
+    idPlaceholder: "例: 123456789012345678",
+    valueLabel: "表示名",
+    valuePlaceholder: "表示させたい名前",
+    resolveLabel: id => UserStore?.getUser?.(id)?.username ?? id,
+};
+
+const guildIconConfig: SectionConfig = {
+    storeKey: "guildIconOverrides",
+    sectionTitle: "サーバーアイコンを追加",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    valueLabel: "画像URL",
+    valuePlaceholder: "https://example.com/icon.png",
+    isImage: true,
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
+const guildNameConfig: SectionConfig = {
+    storeKey: "guildNameOverrides",
+    sectionTitle: "サーバー名を追加",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    valueLabel: "サーバー名",
+    valuePlaceholder: "表示させたいサーバー名",
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
+export default function Settings() {
+    useProxy(vstorage);
+
+    return (
+        <RN.ScrollView style={{ flex: 1 }}>
+            <FormSection title="使い方">
+                <FormText style={{ padding: 16 }}>
+                    ユーザーやサーバーのIDを登録すると、アバター・表示名・サーバーアイコン・サーバー名があなたの端末上でのみ指定した内容に置き換わります。相手や他のユーザーには一切送信・共有されません。項目をタップすると編集・削除できます。
+                </FormText>
+            </FormSection>
+
+            <OverrideSection config={avatarConfig} />
+            <OverrideSection config={nameConfig} />
+            <OverrideSection config={guildIconConfig} />
+            <OverrideSection config={guildNameConfig} />
         </RN.ScrollView>
     );
 }

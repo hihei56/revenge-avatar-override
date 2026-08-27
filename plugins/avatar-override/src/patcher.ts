@@ -2,13 +2,28 @@ import { findByProps, findByStoreName } from "@vendetta/metro";
 import { after } from "@vendetta/patcher";
 import { storage } from "@vendetta/plugin";
 
-// userId -> override image URL
 export const vstorage = storage as {
-    overrides: Record<string, string>;
+    overrides: Record<string, string>; // userId -> avatar URL
+    nameOverrides: Record<string, string>; // userId -> display name
+    guildIconOverrides: Record<string, string>; // guildId -> icon URL
+    guildNameOverrides: Record<string, string>; // guildId -> guild name
 };
 
+export const POOP_IMAGES = [
+    "https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f4a9.png",
+    "https://raw.githubusercontent.com/googlefonts/noto-emoji/main/png/128/emoji_u1f4a9.png",
+    "https://raw.githubusercontent.com/hfg-gmuend/openmoji/master/color/72x72/1F4A9.png",
+    "https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Pile%20of%20poo/3D/pile_of_poo_3d.png",
+    "https://raw.githubusercontent.com/iamcal/emoji-data/master/img-apple-160/1f4a9.png",
+    "https://raw.githubusercontent.com/iamcal/emoji-data/master/img-facebook-96/1f4a9.png",
+];
+
+export const pickRandomPoop = () => POOP_IMAGES[Math.floor(Math.random() * POOP_IMAGES.length)];
+
 const avatarUtils = findByProps("getUserAvatarURL", "getUserAvatarSource");
+const guildIconUtils = findByProps("getGuildIconURL", "getGuildIconSource") ?? avatarUtils;
 const UserStore = findByStoreName("UserStore");
+const GuildStore = findByStoreName("GuildStore");
 
 const urlExt = (url: string) => {
     try {
@@ -18,18 +33,29 @@ const urlExt = (url: string) => {
     }
 };
 
-export default function patchAvatars() {
+export default function patchOverrides() {
     vstorage.overrides ??= {};
+    vstorage.nameOverrides ??= {};
+    vstorage.guildIconOverrides ??= {};
+    vstorage.guildNameOverrides ??= {};
 
     const unpatches = [
-        // Makes Discord treat the user as having an animated avatar hash,
-        // so avatar-decoration/animation code paths don't immediately bail out.
         after("getUser", UserStore, ([id], user) => {
-            if (!user || !vstorage.overrides[id]) return;
-            if (urlExt(vstorage.overrides[id]) !== "gif") return;
+            if (!user) return;
 
-            const avatar = user.avatar ?? "0";
-            if (!avatar.startsWith("a_")) user.avatar = `a_${avatar}`;
+            const avatarOverride = vstorage.overrides[id];
+            if (avatarOverride && urlExt(avatarOverride) === "gif") {
+                // Makes Discord treat the user as having an animated avatar hash,
+                // so avatar-decoration/animation code paths don't immediately bail out.
+                const avatar = user.avatar ?? "0";
+                if (!avatar.startsWith("a_")) user.avatar = `a_${avatar}`;
+            }
+
+            const nameOverride = vstorage.nameOverrides[id];
+            if (nameOverride) {
+                user.globalName = nameOverride;
+                user.username = nameOverride;
+            }
         }),
 
         after("getUserAvatarURL", avatarUtils, ([user, animate]) => {
@@ -50,6 +76,22 @@ export default function patchAvatars() {
                 ? override.replace(/\.gif($|\?)/, ".png$1")
                 : override;
             return { uri };
+        }),
+
+        after("getGuildIconURL", guildIconUtils, ([data]) => {
+            const override = data?.id && vstorage.guildIconOverrides[data.id];
+            return override || undefined;
+        }),
+
+        after("getGuildIconSource", guildIconUtils, ([data]) => {
+            const override = data?.id && vstorage.guildIconOverrides[data.id];
+            return override ? { uri: override } : undefined;
+        }),
+
+        after("getGuild", GuildStore, ([id], guild) => {
+            if (!guild) return;
+            const override = vstorage.guildNameOverrides[id];
+            if (override) guild.name = override;
         }),
     ];
 
