@@ -7,6 +7,7 @@ export const vstorage = storage as {
     nameOverrides: Record<string, string>; // userId -> display name
     guildIconOverrides: Record<string, string>; // guildId -> icon URL
     guildNameOverrides: Record<string, string>; // guildId -> guild name
+    guildBotIconOverrides: Record<string, string>; // guildId -> icon URL applied to all bot/webhook avatars in that guild
 };
 
 export const POOP_IMAGES = [
@@ -25,6 +26,14 @@ const guildIconUtils = findByProps("getGuildIconURL", "getGuildIconSource") ?? a
 const UserStore = findByStoreName("UserStore");
 const GuildStore = findByStoreName("GuildStore");
 
+// The `User` record class exposes guild-aware `getAvatarURL(guildId, ...)` /
+// `getAvatarSource(guildId)` instance methods. Unlike the module-level
+// getUserAvatarURL/getUserAvatarSource above, these receive the guild the
+// avatar is being rendered in, which is the only way to scope an override
+// to "every bot/webhook avatar in this guild" (bots and webhooks are both
+// flagged `bot: true` with no other reliable distinguishing signal).
+const UserRecordProto = UserStore?.getCurrentUser?.()?.constructor?.prototype;
+
 const urlExt = (url: string) => {
     try {
         return new URL(url).pathname.split(".").pop()?.toLowerCase();
@@ -38,6 +47,7 @@ export default function patchOverrides() {
     vstorage.nameOverrides ??= {};
     vstorage.guildIconOverrides ??= {};
     vstorage.guildNameOverrides ??= {};
+    vstorage.guildBotIconOverrides ??= {};
 
     const unpatches = [
         after("getUser", UserStore, ([id], user) => {
@@ -93,7 +103,18 @@ export default function patchOverrides() {
             const override = vstorage.guildNameOverrides[id];
             if (override) guild.name = override;
         }),
-    ];
+
+        UserRecordProto && after("getAvatarURL", UserRecordProto, function (this: any, [guildId]) {
+            if (!this?.bot || !guildId || vstorage.overrides[this.id]) return;
+            return vstorage.guildBotIconOverrides[guildId] || undefined;
+        }),
+
+        UserRecordProto && after("getAvatarSource", UserRecordProto, function (this: any, [guildId]) {
+            if (!this?.bot || !guildId || vstorage.overrides[this.id]) return;
+            const override = vstorage.guildBotIconOverrides[guildId];
+            return override ? { uri: override } : undefined;
+        }),
+    ].filter(Boolean) as (() => void)[];
 
     return () => unpatches.forEach(unpatch => unpatch());
 }

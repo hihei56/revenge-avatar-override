@@ -12,7 +12,12 @@ const { FormRow, FormSection, FormText, FormInput } = Forms;
 const UserStore = findByStoreName("UserStore");
 const GuildStore = findByStoreName("GuildStore");
 
-type StoreKey = "overrides" | "nameOverrides" | "guildIconOverrides" | "guildNameOverrides";
+type StoreKey =
+    | "overrides"
+    | "nameOverrides"
+    | "guildIconOverrides"
+    | "guildNameOverrides"
+    | "guildBotIconOverrides";
 
 const setEntry = (key: StoreKey, id: string, value: string) => {
     vstorage[key] = { ...vstorage[key], [id]: value.trim() };
@@ -231,6 +236,17 @@ const guildNameConfig: SectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
+const guildBotIconConfig: SectionConfig = {
+    storeKey: "guildBotIconOverrides",
+    sectionTitle: "サーバー内のBot/webhookアイコンを一括変更",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    valueLabel: "画像URL",
+    valuePlaceholder: "https://example.com/icon.png",
+    isImage: true,
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
 export default function Settings() {
     useProxy(vstorage);
 
@@ -246,6 +262,13 @@ export default function Settings() {
             <OverrideSection config={nameConfig} />
             <OverrideSection config={guildIconConfig} />
             <OverrideSection config={guildNameConfig} />
+
+            <FormSection title="実験的機能">
+                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                    サーバーID単位でBot/webhookのアイコンを見分ける確実な方法がないため、以下はそのサーバー内の`bot`と判定されるアバター全てに一律適用されます (実在のBotアカウントも巻き込まれます)。個別のユーザーIDが分かる場合は上の「アバターを追加」の方が確実です。
+                </FormText>
+            </FormSection>
+            <OverrideSection config={guildBotIconConfig} />
         </RN.ScrollView>
     );
 }
