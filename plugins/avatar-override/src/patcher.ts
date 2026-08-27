@@ -164,17 +164,25 @@ export default function patchOverrides() {
         UserRecordProto && after("getAvatarURL", UserRecordProto, function (this: any, [guildId]) {
             if (!guildId || !this?.id || vstorage.overrides[this.id] || vstorage.bulkExceptions[this.id]) return;
             if (this.bot) {
-                if (isRealMember(guildId, this.id)) return; // real bot account, not a webhook: leave it alone
-                return vstorage.guildBotIconOverrides[guildId] || undefined;
+                // Check the (cheap) override map before doing the (Flux store lookup)
+                // membership check — most guilds have no bulk bot override configured,
+                // so this skips the extra work entirely for them.
+                const override = vstorage.guildBotIconOverrides[guildId];
+                if (!override || isRealMember(guildId, this.id)) return;
+                return override;
             }
             return vstorage.guildUserIconOverrides[guildId] || undefined;
         }),
 
         UserRecordProto && after("getAvatarSource", UserRecordProto, function (this: any, [guildId]) {
             if (!guildId || !this?.id || vstorage.overrides[this.id] || vstorage.bulkExceptions[this.id]) return;
-            const override = this.bot
-                ? (isRealMember(guildId, this.id) ? undefined : vstorage.guildBotIconOverrides[guildId])
-                : vstorage.guildUserIconOverrides[guildId];
+            let override: string | undefined;
+            if (this.bot) {
+                const botOverride = vstorage.guildBotIconOverrides[guildId];
+                override = botOverride && !isRealMember(guildId, this.id) ? botOverride : undefined;
+            } else {
+                override = vstorage.guildUserIconOverrides[guildId];
+            }
             return override ? { uri: override } : undefined;
         }),
 
