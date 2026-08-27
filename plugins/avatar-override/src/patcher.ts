@@ -111,6 +111,18 @@ export default function patchOverrides() {
     // this patch point).
     const isRealMember = (guildId: string, userId: string) => !!GuildMemberStore?.getMember?.(guildId, userId);
 
+    // getGuildIconURL/getGuildIconSource are typed on desktop as taking a
+    // single { id, icon, ... } object, but that's unverified for this mobile
+    // bundle — if it actually takes a plain guildId string as its first
+    // argument instead, `data?.id` would silently always be undefined (no
+    // crash, just a permanent no-op), which matches "doesn't apply anywhere"
+    // better than a timing bug would. Handle both shapes defensively.
+    const extractGuildId = (first: unknown): string | undefined => {
+        if (typeof first === "string") return first;
+        if (first && typeof first === "object" && typeof (first as any).id === "string") return (first as any).id;
+        return undefined;
+    };
+
     // Shared by both the guild-aware instance methods and the plain
     // module-level avatar functions (using the currently-viewed guild as a
     // best-effort stand-in for the latter).
@@ -176,13 +188,15 @@ export default function patchOverrides() {
             return { uri };
         }),
 
-        guildIconUtils && after("getGuildIconURL", guildIconUtils, ([data]) => {
-            const override = data?.id && vstorage.guildIconOverrides[data.id];
+        guildIconUtils && after("getGuildIconURL", guildIconUtils, ([first]) => {
+            const guildId = extractGuildId(first);
+            const override = guildId && vstorage.guildIconOverrides[guildId];
             return override || undefined;
         }),
 
-        guildIconUtils && after("getGuildIconSource", guildIconUtils, ([data]) => {
-            const override = data?.id && vstorage.guildIconOverrides[data.id];
+        guildIconUtils && after("getGuildIconSource", guildIconUtils, ([first]) => {
+            const guildId = extractGuildId(first);
+            const override = guildId && vstorage.guildIconOverrides[guildId];
             return override ? { uri: override } : undefined;
         }),
 
