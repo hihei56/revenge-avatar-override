@@ -765,60 +765,138 @@ function CountdownSection() {
     );
 }
 
-export default function Settings() {
-    useProxy(vstorage);
+interface SettingsBlock {
+    key: string;
+    keywords: string;
+    render: () => React.ReactNode;
+}
 
-    return (
-        <RN.ScrollView style={{ flex: 1 }}>
+const settingsBlocks: SettingsBlock[] = [
+    {
+        key: "intro",
+        keywords: "使い方 説明 はじめに 使いかた",
+        render: () => (
             <FormSection title="使い方">
                 <FormText style={{ padding: 16 }}>
                     ユーザーやサーバーのIDを登録すると、アバター・表示名・サーバーアイコン・サーバー名があなたの端末上でのみ指定した内容に置き換わります。相手や他のユーザーには一切送信・共有されません。項目をタップすると編集・削除できます。
                 </FormText>
             </FormSection>
-
-            <BackupSection />
-
-            <OverrideSection config={avatarConfig} />
-            <OverrideSection config={nameConfig} />
-            <OverrideSection config={guildIconConfig} />
-            <OverrideSection config={guildBannerConfig} />
-            <OverrideSection config={guildHomeHeaderConfig} />
-            <OverrideSection config={guildNameConfig} />
-            <OverrideSection config={channelNameConfig} />
-            <OverrideSection config={guildChannelBulkRenameConfig} />
-            <ToggleListSection config={clockChannelsConfig} />
-            <FormSection title="時計チャンネルについて">
-                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
-                    登録したチャンネルの名前が、常に現在時刻 (例: 🕐 14:32) に置き換わります。個別のチャンネル名指定より優先されます。表示は約30秒ごとに更新を試みますが、Discord側の再描画のタイミング次第で数十秒〜数分ずれることがあります。
-                </FormText>
-            </FormSection>
-            <CountdownSection />
-
-            <ToggleListSection config={hideReadChannelsConfig} />
-            <FormSection title="既読チャンネル非表示について">
-                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
-                    登録したサーバーでは、未読メッセージがあるチャンネルと今開いているチャンネルだけがチャンネル一覧に表示され、それ以外は隠れます。ボイスチャンネル・テキストチャンネル両方が対象です。カテゴリ自体は非表示になりません (中身が空でも表示されたままです)。
-                </FormText>
-            </FormSection>
-
-            <ToggleListSection config={hideUnreadIndicatorsConfig} />
-            <FormSection title="未読の光る表示を消すことについて">
-                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
-                    登録したサーバーでは、チャンネル一覧の太字・白色ハイライト、メンションの赤いバッジ、サーバーアイコンの未読ドットがまとめて消えます (実際のメッセージ既読状態は変わりません、見た目だけです)。
-                </FormText>
-                <FormText style={{ paddingHorizontal: 16, paddingBottom: 16, color: semanticColors.TEXT_FEEDBACK_CRITICAL }}>
-                    注意: 同じサーバーで上の「既読チャンネル非表示」も有効にすると、そのサーバーの全チャンネルが「既読扱い」になるため、今開いているチャンネル以外は一覧から消えます。
-                </FormText>
-            </FormSection>
-
-            <ToggleListSection config={channelAllowlistConfig} />
-            <ToggleListSection config={allowedChannelsConfig} />
-            <FormSection title="指定チャンネルのみ表示について">
-                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
-                    サーバーを登録すると、そのサーバーのチャンネル一覧が「表示を許可するチャンネル」に登録したものと、今開いているチャンネルだけに絞り込まれます。チャンネルが多いサーバーで、よく使うチャンネルだけ見たい場合に使えます。「表示を許可するチャンネル」はサーバーを問わず共通のリストです。
-                </FormText>
-            </FormSection>
-
+        ),
+    },
+    {
+        key: "backup",
+        keywords: "バックアップ エクスポート インポート 復元 共有 設定の引き継ぎ",
+        render: () => <BackupSection />,
+    },
+    {
+        key: "avatar",
+        keywords: "アバターを追加 画像 うんこ アバター override",
+        render: () => <OverrideSection config={avatarConfig} />,
+    },
+    {
+        key: "name",
+        keywords: "ユーザー名を追加 表示名 名前",
+        render: () => <OverrideSection config={nameConfig} />,
+    },
+    {
+        key: "guildIcon",
+        keywords: "サーバーアイコンを追加 サーバーアイコン アイコン",
+        render: () => <OverrideSection config={guildIconConfig} />,
+    },
+    {
+        key: "guildBanner",
+        keywords: "サーバーバナー画像を追加 バナー 画像",
+        render: () => <OverrideSection config={guildBannerConfig} />,
+    },
+    {
+        key: "guildHomeHeader",
+        keywords: "サーバーホームヘッダー画像を追加 ホーム ガイド ヘッダー 画像",
+        render: () => <OverrideSection config={guildHomeHeaderConfig} />,
+    },
+    {
+        key: "guildName",
+        keywords: "サーバー名を追加 サーバー名",
+        render: () => <OverrideSection config={guildNameConfig} />,
+    },
+    {
+        key: "channelName",
+        keywords: "チャンネル名を追加 チャンネル名",
+        render: () => <OverrideSection config={channelNameConfig} />,
+    },
+    {
+        key: "guildChannelBulkRename",
+        keywords: "サーバー内の全チャンネル名を一括変更 チャンネル 一括変更",
+        render: () => <OverrideSection config={guildChannelBulkRenameConfig} />,
+    },
+    {
+        key: "clockChannels",
+        keywords: "時計チャンネル 現在時刻 時刻表示 clock",
+        render: () => (
+            <>
+                <ToggleListSection config={clockChannelsConfig} />
+                <FormSection title="時計チャンネルについて">
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        登録したチャンネルの名前が、常に現在時刻 (例: 🕐 14:32) に置き換わります。個別のチャンネル名指定より優先されます。表示は約30秒ごとに更新を試みますが、Discord側の再描画のタイミング次第で数十秒〜数分ずれることがあります。
+                    </FormText>
+                </FormSection>
+            </>
+        ),
+    },
+    {
+        key: "countdown",
+        keywords: "カウントダウン 残り時間 countdown 時間 チャンネル",
+        render: () => <CountdownSection />,
+    },
+    {
+        key: "hideReadChannels",
+        keywords: "既読チャンネル非表示 未読のみ表示 チャンネル 重い 軽量化",
+        render: () => (
+            <>
+                <ToggleListSection config={hideReadChannelsConfig} />
+                <FormSection title="既読チャンネル非表示について">
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        登録したサーバーでは、未読メッセージがあるチャンネルと今開いているチャンネルだけがチャンネル一覧に表示され、それ以外は隠れます。ボイスチャンネル・テキストチャンネル両方が対象です。カテゴリ自体は非表示になりません (中身が空でも表示されたままです)。
+                    </FormText>
+                </FormSection>
+            </>
+        ),
+    },
+    {
+        key: "hideUnreadIndicators",
+        keywords: "未読の光る表示を消す 未読 ハイライト バッジ 未読ドット 依存性",
+        render: () => (
+            <>
+                <ToggleListSection config={hideUnreadIndicatorsConfig} />
+                <FormSection title="未読の光る表示を消すことについて">
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        登録したサーバーでは、チャンネル一覧の太字・白色ハイライト、メンションの赤いバッジ、サーバーアイコンの未読ドットがまとめて消えます (実際のメッセージ既読状態は変わりません、見た目だけです)。
+                    </FormText>
+                    <FormText style={{ paddingHorizontal: 16, paddingBottom: 16, color: semanticColors.TEXT_FEEDBACK_CRITICAL }}>
+                        注意: 同じサーバーで上の「既読チャンネル非表示」も有効にすると、そのサーバーの全チャンネルが「既読扱い」になるため、今開いているチャンネル以外は一覧から消えます。
+                    </FormText>
+                </FormSection>
+            </>
+        ),
+    },
+    {
+        key: "channelAllowlist",
+        keywords: "指定チャンネルのみ表示 表示を許可するチャンネル 絞り込み フォーカス",
+        render: () => (
+            <>
+                <ToggleListSection config={channelAllowlistConfig} />
+                <ToggleListSection config={allowedChannelsConfig} />
+                <FormSection title="指定チャンネルのみ表示について">
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        サーバーを登録すると、そのサーバーのチャンネル一覧が「表示を許可するチャンネル」に登録したものと、今開いているチャンネルだけに絞り込まれます。チャンネルが多いサーバーで、よく使うチャンネルだけ見たい場合に使えます。「表示を許可するチャンネル」はサーバーを問わず共通のリストです。
+                    </FormText>
+                </FormSection>
+            </>
+        ),
+    },
+    {
+        key: "roleDisplay",
+        keywords: "ロール表示 ロールを非表示 ロールアイコン プロフィール",
+        render: () => (
             <FormSection title="ロール表示">
                 <FormSwitchRow
                     label="プロフィールのロールを非表示にする"
@@ -833,46 +911,128 @@ export default function Settings() {
                     onValueChange={(value: boolean) => { vstorage.hideRoleIcons = value; }}
                 />
             </FormSection>
-            <ToggleListSection config={roleDisplayExceptionsConfig} />
-            <FormSection title="ロール非表示の除外について">
-                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
-                    ここに登録したユーザーIDは、上の「プロフィールのロールを非表示にする」「ロールアイコンを非表示にする」がONでも、そのユーザーだけロール・ロールアイコンが通常通り表示されます。
-                </FormText>
+        ),
+    },
+    {
+        key: "roleDisplayExceptions",
+        keywords: "ロール非表示の除外 ロール 除外 例外",
+        render: () => (
+            <>
+                <ToggleListSection config={roleDisplayExceptionsConfig} />
+                <FormSection title="ロール非表示の除外について">
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        ここに登録したユーザーIDは、上の「プロフィールのロールを非表示にする」「ロールアイコンを非表示にする」がONでも、そのユーザーだけロール・ロールアイコンが通常通り表示されます。
+                    </FormText>
+                </FormSection>
+            </>
+        ),
+    },
+    {
+        key: "roleColor",
+        keywords: "ロールカラー無効化 ロールの色 無効化",
+        render: () => <ToggleListSection config={roleColorConfig} />,
+    },
+    {
+        key: "hiddenStatus",
+        keywords: "オンラインステータスを隠す ステータス オフライン",
+        render: () => <ToggleListSection config={hiddenStatusConfig} />,
+    },
+    {
+        key: "guildHideAllStatus",
+        keywords: "サーバー内全員オフライン扱い ステータス オフライン",
+        render: () => (
+            <>
+                <ToggleListSection config={guildHideAllStatusConfig} />
+                <FormSection title="サーバー内全員オフライン扱いについて">
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        オンラインステータスはユーザーごとの共通データ (サーバーごとには分かれていません) のため、ここで登録したサーバーのメンバーは、そのサーバーに限らずDMや他のサーバーでも常にオフライン扱いになります。
+                    </FormText>
+                </FormSection>
+            </>
+        ),
+    },
+    {
+        key: "bulkExceptions",
+        keywords: "除外ユーザー 一括変更 除外",
+        render: () => (
+            <>
+                <ToggleListSection config={bulkExceptionsConfig} />
+                <FormSection title="除外ユーザーについて">
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        ここに登録したユーザーIDは、下の「サーバー内の全ユーザー/Bot一括変更」系の設定すべてから常に除外されます (自分自身などを除外したい場合に使います)。個別の「アバターを追加」「ユーザー名を追加」には影響しません。
+                    </FormText>
+                </FormSection>
+            </>
+        ),
+    },
+    {
+        key: "guildUserIcon",
+        keywords: "サーバー内の全ユーザーのアイコンを一括変更 一括変更 アイコン",
+        render: () => <OverrideSection config={guildUserIconConfig} />,
+    },
+    {
+        key: "guildUserName",
+        keywords: "サーバー内の全ユーザーの表示名を一括変更 一括変更 表示名",
+        render: () => <OverrideSection config={guildUserNameConfig} />,
+    },
+    {
+        key: "allowedTags",
+        keywords: "サーバータグ タグ 表示を許可",
+        render: () => (
+            <>
+                <ToggleListSection config={allowedTagsConfig} />
+                <FormSection title="サーバータグについて">
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        ここに1つ以上登録すると、登録したサーバー由来のサーバータグ以外は全て非表示になります (メッセージやプロフィールに出るユーザー名の横の小さなタグ)。何も登録しなければ通常通り全て表示されます。
+                    </FormText>
+                </FormSection>
+            </>
+        ),
+    },
+    {
+        key: "guildBotIcon",
+        keywords: "Bot webhookアイコン一括変更 ボット アイコン",
+        render: () => (
+            <>
+                <FormSection title="Bot/webhookアイコン一括変更について">
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        そのサーバーの実メンバーではないbot判定アバター (= webhook) にのみ適用されます。Carl-botなど実在のBotアカウントは自動的に対象外です。
+                    </FormText>
+                </FormSection>
+                <OverrideSection config={guildBotIconConfig} />
+            </>
+        ),
+    },
+];
+
+export default function Settings() {
+    useProxy(vstorage);
+    const [search, setSearch] = React.useState("");
+
+    const query = search.trim().toLowerCase();
+    const visibleBlocks = query
+        ? settingsBlocks.filter(block => block.keywords.toLowerCase().includes(query))
+        : settingsBlocks;
+
+    return (
+        <RN.ScrollView style={{ flex: 1 }}>
+            <FormSection title="項目を検索">
+                <FormInput
+                    placeholder="例: サーバーアイコン、ロール、時計"
+                    value={search}
+                    onChange={setSearch}
+                />
             </FormSection>
-
-            <ToggleListSection config={roleColorConfig} />
-            <ToggleListSection config={hiddenStatusConfig} />
-
-            <ToggleListSection config={guildHideAllStatusConfig} />
-            <FormSection title="サーバー内全員オフライン扱いについて">
-                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
-                    オンラインステータスはユーザーごとの共通データ (サーバーごとには分かれていません) のため、ここで登録したサーバーのメンバーは、そのサーバーに限らずDMや他のサーバーでも常にオフライン扱いになります。
-                </FormText>
-            </FormSection>
-
-            <ToggleListSection config={bulkExceptionsConfig} />
-            <FormSection title="除外ユーザーについて">
-                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
-                    ここに登録したユーザーIDは、下の「サーバー内の全ユーザー/Bot一括変更」系の設定すべてから常に除外されます (自分自身などを除外したい場合に使います)。個別の「アバターを追加」「ユーザー名を追加」には影響しません。
-                </FormText>
-            </FormSection>
-
-            <OverrideSection config={guildUserIconConfig} />
-            <OverrideSection config={guildUserNameConfig} />
-
-            <ToggleListSection config={allowedTagsConfig} />
-            <FormSection title="サーバータグについて">
-                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
-                    ここに1つ以上登録すると、登録したサーバー由来のサーバータグ以外は全て非表示になります (メッセージやプロフィールに出るユーザー名の横の小さなタグ)。何も登録しなければ通常通り全て表示されます。
-                </FormText>
-            </FormSection>
-
-            <FormSection title="Bot/webhookアイコン一括変更について">
-                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
-                    そのサーバーの実メンバーではないbot判定アバター (= webhook) にのみ適用されます。Carl-botなど実在のBotアカウントは自動的に対象外です。
-                </FormText>
-            </FormSection>
-            <OverrideSection config={guildBotIconConfig} />
+            {query !== "" && visibleBlocks.length === 0 && (
+                <FormSection title="検索結果なし">
+                    <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                        一致する項目が見つかりませんでした
+                    </FormText>
+                </FormSection>
+            )}
+            {visibleBlocks.map(block => (
+                <React.Fragment key={block.key}>{block.render()}</React.Fragment>
+            ))}
         </RN.ScrollView>
     );
 }
