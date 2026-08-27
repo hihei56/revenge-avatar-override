@@ -344,12 +344,19 @@ export default function patchOverrides() {
 
         UserRecordProto && after("getAvatarURL", UserRecordProto, function (this: any, [guildId]) {
             if (!this?.id) return;
-            return guildWideIconOverride(guildId, this.id, !!this.bot);
+            // guildWideIconOverride() deliberately returns undefined when an
+            // individual override exists for this user (it assumes something
+            // else applies it) — but nothing else was checking vstorage.overrides
+            // on this call path, so an individually-overridden user's avatar
+            // never changed in profile popups (this instance method's actual
+            // caller), even though it worked correctly in the chat feed, which
+            // goes through the separate module-level getUserAvatarURL below.
+            return vstorage.overrides[this.id] || guildWideIconOverride(guildId, this.id, !!this.bot);
         }),
 
         UserRecordProto && after("getAvatarSource", UserRecordProto, function (this: any, [guildId]) {
             if (!this?.id) return;
-            const override = guildWideIconOverride(guildId, this.id, !!this.bot);
+            const override = vstorage.overrides[this.id] || guildWideIconOverride(guildId, this.id, !!this.bot);
             return override ? { uri: override } : undefined;
         }),
 
