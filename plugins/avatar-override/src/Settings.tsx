@@ -544,9 +544,9 @@ export default function Settings() {
                 </FormText>
             </FormSection>
 
-            <FormSection title="実験的機能">
+            <FormSection title="Bot/webhookアイコン一括変更について">
                 <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
-                    サーバーID単位でBot/webhookのアイコンを見分ける確実な方法がないため、以下はそのサーバー内の`bot`と判定されるアバター全てに一律適用されます (実在のBotアカウントも巻き込まれます)。個別のユーザーIDが分かる場合は上の「アバターを追加」の方が確実です。
+                    そのサーバーの実メンバーではないbot判定アバター (= webhook) にのみ適用されます。Carl-botなど実在のBotアカウントは自動的に対象外です。
                 </FormText>
             </FormSection>
             <OverrideSection config={guildBotIconConfig} />

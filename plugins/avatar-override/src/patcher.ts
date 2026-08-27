@@ -56,10 +56,16 @@ const PresenceStore = findByStoreName("PresenceStore");
 // The `User` record class exposes guild-aware `getAvatarURL(guildId, ...)` /
 // `getAvatarSource(guildId)` instance methods. Unlike the module-level
 // getUserAvatarURL/getUserAvatarSource above, these receive the guild the
-// avatar is being rendered in, which is the only way to scope an override
-// to "every bot/webhook avatar in this guild" (bots and webhooks are both
-// flagged `bot: true` with no other reliable distinguishing signal).
+// avatar is being rendered in, which is what lets us scope an override to
+// "every webhook avatar in this guild".
 const UserRecordProto = UserStore?.getCurrentUser?.()?.constructor?.prototype;
+
+// Webhooks aren't real guild members (no roles, no join date), while an
+// actual bot account is. A bot-flagged user with no GuildMember record in
+// this guild is therefore a webhook, not a real bot — this is how we tell
+// them apart without needing the Message object (which isn't available at
+// this patch point).
+const isRealMember = (guildId: string, userId: string) => !!GuildMemberStore?.getMember?.(guildId, userId);
 
 const urlExt = (url: string) => {
     try {
@@ -147,14 +153,18 @@ export default function patchOverrides() {
 
         UserRecordProto && after("getAvatarURL", UserRecordProto, function (this: any, [guildId]) {
             if (!guildId || !this?.id || vstorage.overrides[this.id] || vstorage.bulkExceptions[this.id]) return;
-            const guildOverrides = this.bot ? vstorage.guildBotIconOverrides : vstorage.guildUserIconOverrides;
-            return guildOverrides[guildId] || undefined;
+            if (this.bot) {
+                if (isRealMember(guildId, this.id)) return; // real bot account, not a webhook: leave it alone
+                return vstorage.guildBotIconOverrides[guildId] || undefined;
+            }
+            return vstorage.guildUserIconOverrides[guildId] || undefined;
         }),
 
         UserRecordProto && after("getAvatarSource", UserRecordProto, function (this: any, [guildId]) {
             if (!guildId || !this?.id || vstorage.overrides[this.id] || vstorage.bulkExceptions[this.id]) return;
-            const guildOverrides = this.bot ? vstorage.guildBotIconOverrides : vstorage.guildUserIconOverrides;
-            const override = guildOverrides[guildId];
+            const override = this.bot
+                ? (isRealMember(guildId, this.id) ? undefined : vstorage.guildBotIconOverrides[guildId])
+                : vstorage.guildUserIconOverrides[guildId];
             return override ? { uri: override } : undefined;
         }),
 
