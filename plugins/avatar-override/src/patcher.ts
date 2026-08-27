@@ -1,4 +1,4 @@
-import { findByProps, findByStoreName } from "@vendetta/metro";
+import { find, findByProps, findByStoreName } from "@vendetta/metro";
 import { ReactNative as RN } from "@vendetta/metro/common";
 import { after, before } from "@vendetta/patcher";
 import { storage } from "@vendetta/plugin";
@@ -31,6 +31,7 @@ export const vstorage = storage as {
     hideUnreadIndicatorsGuilds: Record<string, boolean>; // guildId -> suppresses the unread bold/highlight, mention badge count, and server-icon unread dot for that guild
     channelAllowlistGuilds: Record<string, boolean>; // guildId -> channel list only shows channels registered in allowedChannelIds (plus whichever one is open) in that guild
     allowedChannelIds: Record<string, boolean>; // channelId -> stays visible when its guild has channelAllowlistGuilds enabled
+    keepDeveloperModeOn: boolean; // best-effort: forces Discord's own Developer Mode setting back on if it's found off
 };
 
 export const STORAGE_KEYS = [
@@ -61,6 +62,7 @@ export const STORAGE_KEYS = [
     "hideUnreadIndicatorsGuilds",
     "channelAllowlistGuilds",
     "allowedChannelIds",
+    "keepDeveloperModeOn",
 ] as const;
 
 export const POOP_IMAGES = [
@@ -149,6 +151,7 @@ export default function patchOverrides() {
     vstorage.hideUnreadIndicatorsGuilds ??= {};
     vstorage.channelAllowlistGuilds ??= {};
     vstorage.allowedChannelIds ??= {};
+    vstorage.keepDeveloperModeOn ??= false;
 
     // Every findByProps/findByStoreName lookup below is resolved here, inside
     // patchOverrides() (called at onLoad), rather than at module top-level.
@@ -249,6 +252,58 @@ export default function patchOverrides() {
     // Per-server ("server profile") avatar CDN path — distinct from a normal
     // user avatar's /avatars/{userId}/{hash} (no /guilds/.../users/ prefix).
     const GUILD_MEMBER_AVATAR_URI_RE = /(?:cdn\.discordapp\.com|media\.discordapp\.net)\/guilds\/(\d{15,25})\/users\/(\d{15,25})\/avatars\//;
+
+    // Discord's own "Developer Mode" (Settings > Advanced), reported to turn
+    // itself off unexpectedly. Every individual row in Discord's Settings UI
+    // (this one included) is implemented through a shared per-setting
+    // definition object — { getSetting(), updateSetting(value), useSetting(),
+    // userSettingsAPIGroup, userSettingsAPIName } — confirmed via Vencord's
+    // real UserSettingsAPI (getUserSettingLazy("appearance", "developerMode"))
+    // and its betterRoleContext plugin actually calling .updateSetting(true)
+    // on the result to force developer mode on. Vencord's own lookup
+    // (findModuleId with a desktop-bundle-specific search string) doesn't
+    // apply here, so this re-implements the same "scan a module's exports for
+    // an entry tagged with this group/name" idea as a plain predicate search
+    // instead — if this mobile bundle doesn't expose the same definition-
+    // object shape, the search just finds nothing and this feature silently
+    // no-ops, same as every other typeof-guarded patch in this file.
+    let developerModeSetting: any;
+    const getDeveloperModeSetting = () => {
+        if (developerModeSetting !== undefined) return developerModeSetting;
+        const definitions = find((m: any) => {
+            if (!m || typeof m !== "object") return false;
+            for (const key in m) {
+                const v = m[key];
+                if (v?.userSettingsAPIGroup === "appearance" && v?.userSettingsAPIName === "developerMode") return true;
+            }
+            return false;
+        });
+        developerModeSetting = null;
+        if (definitions) {
+            for (const key in definitions) {
+                const v = definitions[key];
+                if (v?.userSettingsAPIGroup === "appearance" && v?.userSettingsAPIName === "developerMode") {
+                    developerModeSetting = v;
+                    break;
+                }
+            }
+        }
+        return developerModeSetting;
+    };
+
+    const forceDeveloperModeOn = () => {
+        if (!vstorage.keepDeveloperModeOn) return;
+        try {
+            const setting = getDeveloperModeSetting();
+            if (setting && setting.getSetting?.() === false) {
+                setting.updateSetting?.(true);
+            }
+        } catch {
+            // best-effort only — never let this break plugin load
+        }
+    };
+
+    forceDeveloperModeOn();
 
     const unpatches = [
         typeof RN?.Image === "function" && before("Image", RN, ([props]: [any]) => {
@@ -590,6 +645,7 @@ export default function patchOverrides() {
         if (hasClockFeature && typeof (ChannelStore as any)?.emitChange === "function") {
             (ChannelStore as any).emitChange();
         }
+        forceDeveloperModeOn();
     }, 30000);
 
     return () => {

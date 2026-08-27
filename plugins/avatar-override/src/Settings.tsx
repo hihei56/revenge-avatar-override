@@ -13,6 +13,8 @@ const { FormRow, FormSection, FormText, FormInput, FormSwitchRow } = Forms;
 const UserStore = findByStoreName("UserStore");
 const GuildStore = findByStoreName("GuildStore");
 const ChannelStore = findByStoreName("ChannelStore");
+const SelectedGuildStore = findByStoreName("SelectedGuildStore");
+const SelectedChannelStore = findByStoreName("SelectedChannelStore");
 
 // Same document-picker lookup used by other Revenge plugins (e.g. monet-theme's
 // AddBackgroundSheet) to let the user pick an image from the device. The
@@ -667,6 +669,71 @@ function BackupSection() {
     );
 }
 
+function QuickIdSection() {
+    const [, forceRerender] = React.useState(0);
+
+    const guildId: string | undefined = SelectedGuildStore?.getGuildId?.();
+    const channelId: string | undefined = SelectedChannelStore?.getChannelId?.(guildId);
+    const selfId: string | undefined = UserStore?.getCurrentUser?.()?.id;
+
+    const copy = (label: string, id: string | undefined) => {
+        if (!id) {
+            showToast(`${label}を取得できませんでした`, getAssetIDByName("CircleXIcon-primary"));
+            return;
+        }
+        clipboard.setString(id);
+        showToast(`${label}をコピーしました: ${id}`, getAssetIDByName("CopyIcon"));
+    };
+
+    return (
+        <FormSection title="IDを簡単コピー">
+            <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                開発者モードがオフでも、今開いているサーバー・チャンネルのIDをここからコピーできます。行をタップでコピーします。他の画面に移動した後は「今の場所を再取得」で更新してください。
+            </FormText>
+            <FormRow
+                label="現在のサーバーID"
+                subLabel={guildId ? `${GuildStore?.getGuild?.(guildId)?.name ?? ""} (${guildId})` : "サーバーを開いていません"}
+                leading={<FormRow.Icon source={getAssetIDByName("CopyIcon")} />}
+                onPress={() => copy("サーバーID", guildId)}
+            />
+            <FormRow
+                label="現在のチャンネルID"
+                subLabel={channelId ? `${ChannelStore?.getChannel?.(channelId)?.name ?? ""} (${channelId})` : "チャンネルを開いていません"}
+                leading={<FormRow.Icon source={getAssetIDByName("CopyIcon")} />}
+                onPress={() => copy("チャンネルID", channelId)}
+            />
+            <FormRow
+                label="自分のユーザーID"
+                subLabel={selfId ?? "取得できません"}
+                leading={<FormRow.Icon source={getAssetIDByName("CopyIcon")} />}
+                onPress={() => copy("ユーザーID", selfId)}
+            />
+            <FormRow
+                label="今の場所を再取得"
+                leading={<FormRow.Icon source={getAssetIDByName("RefreshIcon")} />}
+                onPress={() => forceRerender(n => n + 1)}
+            />
+        </FormSection>
+    );
+}
+
+function DeveloperModeSection() {
+    useProxy(vstorage);
+
+    return (
+        <FormSection title="開発者モードの維持">
+            <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                Discordの「開発者モード」(設定 &gt; 詳細設定) が勝手にオフになる場合、ONにすると約30秒ごとにチェックしてオンに戻そうとします。対応する内部設定がこの端末で見つからない場合は何も起きません (安全のため無視されるだけです)。上の「IDを簡単コピー」を使えば、そもそも開発者モードなしでもサーバー・チャンネルIDを取得できます。
+            </FormText>
+            <FormSwitchRow
+                label="開発者モードがオフになったら戻す"
+                value={vstorage.keepDeveloperModeOn}
+                onValueChange={(value: boolean) => { vstorage.keepDeveloperModeOn = value; }}
+            />
+        </FormSection>
+    );
+}
+
 function parseDateTimeInput(text: string): number | undefined {
     const m = text.trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/);
     if (!m) return undefined;
@@ -787,6 +854,16 @@ const settingsBlocks: SettingsBlock[] = [
         key: "backup",
         keywords: "バックアップ エクスポート インポート 復元 共有 設定の引き継ぎ",
         render: () => <BackupSection />,
+    },
+    {
+        key: "quickIds",
+        keywords: "ID 簡単コピー サーバーID チャンネルID ユーザーID 開発者モード コピー",
+        render: () => <QuickIdSection />,
+    },
+    {
+        key: "developerMode",
+        keywords: "開発者モード developer mode オフになる 維持",
+        render: () => <DeveloperModeSection />,
     },
     {
         key: "avatar",
