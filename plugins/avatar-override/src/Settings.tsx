@@ -20,7 +20,9 @@ type StoreKey =
     | "guildNameOverrides"
     | "guildBotIconOverrides"
     | "channelNameOverrides"
-    | "guildChannelBulkRename";
+    | "guildChannelBulkRename"
+    | "guildUserIconOverrides"
+    | "guildUserNameOverrides";
 
 const setEntry = (key: StoreKey, id: string, value: string) => {
     vstorage[key] = { ...vstorage[key], [id]: value.trim() };
@@ -251,6 +253,28 @@ const guildBotIconConfig: SectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
+const guildUserIconConfig: SectionConfig = {
+    storeKey: "guildUserIconOverrides",
+    sectionTitle: "サーバー内の全ユーザーのアイコンを一括変更",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    valueLabel: "画像URL",
+    valuePlaceholder: "https://example.com/icon.png",
+    isImage: true,
+    allowBlankRandomPoop: true,
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
+const guildUserNameConfig: SectionConfig = {
+    storeKey: "guildUserNameOverrides",
+    sectionTitle: "サーバー内の全ユーザーの表示名を一括変更",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    valueLabel: "表示名 (全員共通)",
+    valuePlaceholder: "例: うんこ",
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
 const channelNameConfig: SectionConfig = {
     storeKey: "channelNameOverrides",
     sectionTitle: "チャンネル名を追加",
@@ -271,7 +295,7 @@ const guildChannelBulkRenameConfig: SectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
-type ToggleStoreKey = "roleColorDisabled" | "hiddenStatusUsers";
+type ToggleStoreKey = "roleColorDisabled" | "hiddenStatusUsers" | "bulkExceptions";
 
 interface ToggleSectionConfig {
     storeKey: ToggleStoreKey;
@@ -368,6 +392,14 @@ const hiddenStatusConfig: ToggleSectionConfig = {
     resolveLabel: id => UserStore?.getUser?.(id)?.username ?? id,
 };
 
+const bulkExceptionsConfig: ToggleSectionConfig = {
+    storeKey: "bulkExceptions",
+    sectionTitle: "一括変更から除外するユーザーを追加",
+    idLabel: "ユーザーID",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => UserStore?.getUser?.(id)?.username ?? id,
+};
+
 export default function Settings() {
     useProxy(vstorage);
 
@@ -387,6 +419,16 @@ export default function Settings() {
             <OverrideSection config={guildChannelBulkRenameConfig} />
             <ToggleListSection config={roleColorConfig} />
             <ToggleListSection config={hiddenStatusConfig} />
+
+            <ToggleListSection config={bulkExceptionsConfig} />
+            <FormSection title="除外ユーザーについて">
+                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                    ここに登録したユーザーIDは、下の「サーバー内の全ユーザー/Bot一括変更」系の設定すべてから常に除外されます (自分自身などを除外したい場合に使います)。個別の「アバターを追加」「ユーザー名を追加」には影響しません。
+                </FormText>
+            </FormSection>
+
+            <OverrideSection config={guildUserIconConfig} />
+            <OverrideSection config={guildUserNameConfig} />
 
             <FormSection title="実験的機能">
                 <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>

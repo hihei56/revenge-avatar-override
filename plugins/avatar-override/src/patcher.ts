@@ -12,6 +12,9 @@ export const vstorage = storage as {
     channelNameOverrides: Record<string, string>; // channelId -> channel name
     hiddenStatusUsers: Record<string, boolean>; // userId -> show as offline regardless of real status
     guildChannelBulkRename: Record<string, string>; // guildId -> name applied to every channel in that guild
+    guildUserIconOverrides: Record<string, string>; // guildId -> icon URL applied to all non-bot avatars in that guild
+    guildUserNameOverrides: Record<string, string>; // guildId -> display name applied to all non-excepted members in that guild
+    bulkExceptions: Record<string, boolean>; // userId -> excluded from every guild-wide bulk override above
 };
 
 export const POOP_IMAGES = [
@@ -59,6 +62,9 @@ export default function patchOverrides() {
     vstorage.channelNameOverrides ??= {};
     vstorage.hiddenStatusUsers ??= {};
     vstorage.guildChannelBulkRename ??= {};
+    vstorage.guildUserIconOverrides ??= {};
+    vstorage.guildUserNameOverrides ??= {};
+    vstorage.bulkExceptions ??= {};
 
     const unpatches = [
         after("getUser", UserStore, ([id], user) => {
@@ -116,20 +122,28 @@ export default function patchOverrides() {
         }),
 
         UserRecordProto && after("getAvatarURL", UserRecordProto, function (this: any, [guildId]) {
-            if (!this?.bot || !guildId || vstorage.overrides[this.id]) return;
-            return vstorage.guildBotIconOverrides[guildId] || undefined;
+            if (!guildId || !this?.id || vstorage.overrides[this.id] || vstorage.bulkExceptions[this.id]) return;
+            const guildOverrides = this.bot ? vstorage.guildBotIconOverrides : vstorage.guildUserIconOverrides;
+            return guildOverrides[guildId] || undefined;
         }),
 
         UserRecordProto && after("getAvatarSource", UserRecordProto, function (this: any, [guildId]) {
-            if (!this?.bot || !guildId || vstorage.overrides[this.id]) return;
-            const override = vstorage.guildBotIconOverrides[guildId];
+            if (!guildId || !this?.id || vstorage.overrides[this.id] || vstorage.bulkExceptions[this.id]) return;
+            const guildOverrides = this.bot ? vstorage.guildBotIconOverrides : vstorage.guildUserIconOverrides;
+            const override = guildOverrides[guildId];
             return override ? { uri: override } : undefined;
         }),
 
-        GuildMemberStore && after("getMember", GuildMemberStore, ([guildId], member) => {
-            if (!member || !vstorage.roleColorDisabled[guildId]) return;
-            member.colorString = null;
-            member.colorRoleId = null;
+        GuildMemberStore && after("getMember", GuildMemberStore, ([guildId, userId], member) => {
+            if (!member) return;
+
+            if (vstorage.roleColorDisabled[guildId]) {
+                member.colorString = null;
+                member.colorRoleId = null;
+            }
+
+            const nameOverride = !vstorage.bulkExceptions[userId] && vstorage.guildUserNameOverrides[guildId];
+            if (nameOverride) member.nick = nameOverride;
         }),
 
         ChannelStore && after("getChannel", ChannelStore, ([id], channel) => {
