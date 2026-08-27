@@ -19,7 +19,8 @@ type StoreKey =
     | "guildIconOverrides"
     | "guildNameOverrides"
     | "guildBotIconOverrides"
-    | "channelNameOverrides";
+    | "channelNameOverrides"
+    | "guildChannelBulkRename";
 
 const setEntry = (key: StoreKey, id: string, value: string) => {
     vstorage[key] = { ...vstorage[key], [id]: value.trim() };
@@ -246,6 +247,7 @@ const guildBotIconConfig: SectionConfig = {
     valueLabel: "画像URL",
     valuePlaceholder: "https://example.com/icon.png",
     isImage: true,
+    allowBlankRandomPoop: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -257,6 +259,16 @@ const channelNameConfig: SectionConfig = {
     valueLabel: "チャンネル名",
     valuePlaceholder: "表示させたいチャンネル名",
     resolveLabel: id => ChannelStore?.getChannel?.(id)?.name ?? id,
+};
+
+const guildChannelBulkRenameConfig: SectionConfig = {
+    storeKey: "guildChannelBulkRename",
+    sectionTitle: "サーバー内の全チャンネル名を一括変更",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    valueLabel: "チャンネル名 (全チャンネル共通)",
+    valuePlaceholder: "例: うんこ",
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
 type ToggleStoreKey = "roleColorDisabled" | "hiddenStatusUsers";
@@ -372,6 +384,7 @@ export default function Settings() {
             <OverrideSection config={guildIconConfig} />
             <OverrideSection config={guildNameConfig} />
             <OverrideSection config={channelNameConfig} />
+            <OverrideSection config={guildChannelBulkRenameConfig} />
             <ToggleListSection config={roleColorConfig} />
             <ToggleListSection config={hiddenStatusConfig} />
 

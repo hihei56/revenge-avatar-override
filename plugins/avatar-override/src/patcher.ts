@@ -11,6 +11,7 @@ export const vstorage = storage as {
     roleColorDisabled: Record<string, boolean>; // guildId -> role colors hidden in that guild
     channelNameOverrides: Record<string, string>; // channelId -> channel name
     hiddenStatusUsers: Record<string, boolean>; // userId -> show as offline regardless of real status
+    guildChannelBulkRename: Record<string, string>; // guildId -> name applied to every channel in that guild
 };
 
 export const POOP_IMAGES = [
@@ -57,6 +58,7 @@ export default function patchOverrides() {
     vstorage.roleColorDisabled ??= {};
     vstorage.channelNameOverrides ??= {};
     vstorage.hiddenStatusUsers ??= {};
+    vstorage.guildChannelBulkRename ??= {};
 
     const unpatches = [
         after("getUser", UserStore, ([id], user) => {
@@ -132,8 +134,15 @@ export default function patchOverrides() {
 
         ChannelStore && after("getChannel", ChannelStore, ([id], channel) => {
             if (!channel) return;
-            const override = vstorage.channelNameOverrides[id];
-            if (override) channel.name = override;
+
+            const individualOverride = vstorage.channelNameOverrides[id];
+            if (individualOverride) {
+                channel.name = individualOverride;
+                return;
+            }
+
+            const bulkName = channel.guild_id && vstorage.guildChannelBulkRename[channel.guild_id];
+            if (bulkName) channel.name = bulkName;
         }),
 
         PresenceStore && after("getStatus", PresenceStore, ([id]) => {
