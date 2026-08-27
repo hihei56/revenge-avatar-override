@@ -85,6 +85,14 @@ export default function patchOverrides() {
     const GuildMemberStore = findByStoreName("GuildMemberStore");
     const ChannelStore = findByStoreName("ChannelStore");
     const PresenceStore = findByStoreName("PresenceStore");
+    // Only the guild-aware getAvatarURL(guildId, ...)/getAvatarSource(guildId)
+    // instance methods below receive a guild directly (e.g. profile popups).
+    // The plain module-level getUserAvatarURL/getUserAvatarSource(user, animate)
+    // patched further down — which is what message-list avatars in a channel
+    // actually call — never receives one, so the guild-wide bulk overrides
+    // silently never applied there. SelectedGuildStore.getGuildId() (the guild
+    // currently being viewed) is used as a stand-in guild context for that path.
+    const SelectedGuildStore = findByStoreName("SelectedGuildStore");
 
     // The `User` record class exposes guild-aware `getAvatarURL(guildId, ...)` /
     // `getAvatarSource(guildId)` instance methods. Unlike the module-level
@@ -99,6 +107,18 @@ export default function patchOverrides() {
     // them apart without needing the Message object (which isn't available at
     // this patch point).
     const isRealMember = (guildId: string, userId: string) => !!GuildMemberStore?.getMember?.(guildId, userId);
+
+    // Shared by both the guild-aware instance methods and the plain
+    // module-level avatar functions (using the currently-viewed guild as a
+    // best-effort stand-in for the latter).
+    const guildWideIconOverride = (guildId: string | undefined, userId: string, isBot: boolean) => {
+        if (!guildId || vstorage.overrides[userId] || vstorage.bulkExceptions[userId]) return undefined;
+        if (isBot) {
+            const override = vstorage.guildBotIconOverrides[guildId];
+            return !override || isRealMember(guildId, userId) ? undefined : override;
+        }
+        return vstorage.guildUserIconOverrides[guildId] || undefined;
+    };
 
     const unpatches = [
         UserStore && after("getUser", UserStore, ([id], user) => {
@@ -126,7 +146,11 @@ export default function patchOverrides() {
         }),
 
         avatarUtils && after("getUserAvatarURL", avatarUtils, ([user, animate]) => {
-            const override = user?.id && vstorage.overrides[user.id];
+            if (!user?.id) return;
+
+            const individualOverride = vstorage.overrides[user.id];
+            const override = individualOverride
+                || guildWideIconOverride(SelectedGuildStore?.getGuildId?.(), user.id, !!user.bot);
             if (!override) return;
 
             if (!animate && urlExt(override) === "gif") {
@@ -136,7 +160,11 @@ export default function patchOverrides() {
         }),
 
         avatarUtils && after("getUserAvatarSource", avatarUtils, ([user, animate]) => {
-            const override = user?.id && vstorage.overrides[user.id];
+            if (!user?.id) return;
+
+            const individualOverride = vstorage.overrides[user.id];
+            const override = individualOverride
+                || guildWideIconOverride(SelectedGuildStore?.getGuildId?.(), user.id, !!user.bot);
             if (!override) return;
 
             const uri = !animate && urlExt(override) === "gif"
@@ -162,27 +190,13 @@ export default function patchOverrides() {
         }),
 
         UserRecordProto && after("getAvatarURL", UserRecordProto, function (this: any, [guildId]) {
-            if (!guildId || !this?.id || vstorage.overrides[this.id] || vstorage.bulkExceptions[this.id]) return;
-            if (this.bot) {
-                // Check the (cheap) override map before doing the (Flux store lookup)
-                // membership check — most guilds have no bulk bot override configured,
-                // so this skips the extra work entirely for them.
-                const override = vstorage.guildBotIconOverrides[guildId];
-                if (!override || isRealMember(guildId, this.id)) return;
-                return override;
-            }
-            return vstorage.guildUserIconOverrides[guildId] || undefined;
+            if (!this?.id) return;
+            return guildWideIconOverride(guildId, this.id, !!this.bot);
         }),
 
         UserRecordProto && after("getAvatarSource", UserRecordProto, function (this: any, [guildId]) {
-            if (!guildId || !this?.id || vstorage.overrides[this.id] || vstorage.bulkExceptions[this.id]) return;
-            let override: string | undefined;
-            if (this.bot) {
-                const botOverride = vstorage.guildBotIconOverrides[guildId];
-                override = botOverride && !isRealMember(guildId, this.id) ? botOverride : undefined;
-            } else {
-                override = vstorage.guildUserIconOverrides[guildId];
-            }
+            if (!this?.id) return;
+            const override = guildWideIconOverride(guildId, this.id, !!this.bot);
             return override ? { uri: override } : undefined;
         }),
 

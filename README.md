@@ -45,6 +45,7 @@
 - `GuildMemberStore.getMember` の `colorString` / `colorRoleId` / `colorStrings` (グラデーションロール用) を消去、`nick` を上書き → ロールカラー無効化 / サーバー内全ユーザーの表示名一括変更
 - `PresenceStore.getStatus` → オンラインステータス非表示 (登録ユーザーは常に`offline`を返す)
 - `User`インスタンスの`getAvatarURL(guildId, ...)` / `getAvatarSource(guildId)` → サーバー内の全ユーザー/webhookアイコン一括変更。`bot`フラグに加えて、そのサーバーの`GuildMemberStore.getMember`に実在するか (webhookは実際のメンバーではないため存在しない) で実在Botとwebhookを区別しています (個別のアバター上書きと除外ユーザーは常に対象外)
+- チャット画面のアバターは上記のインスタンスメソッドを経由せず、サーバー情報を受け取らない`getUserAvatarURL`/`getUserAvatarSource`だけを呼ぶため、そちらにも`SelectedGuildStore.getGuildId()`(今開いているサーバー)を使って同じ一括変更ロジックを適用しています
 
 アバターにGIFのURLを登録すると、アニメーション表示に対応した箇所ではアニメーションGIFとして、それ以外では静止画として表示されます。
 アバターURLを空欄のまま追加すると、Twemoji/Noto/OpenMoji/Fluent Emoji/Appleなど複数種類の💩絵文字画像からランダムに1つが割り当てられます。
