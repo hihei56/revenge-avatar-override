@@ -513,6 +513,7 @@ interface ToggleSectionConfig {
     idLabel: string;
     idPlaceholder: string;
     pickGuild?: boolean;
+    quickAddCurrentUser?: boolean;
     resolveLabel: (id: string) => string;
 }
 
@@ -540,9 +541,31 @@ function ToggleListSection({ config }: { config: ToggleSectionConfig }) {
         vstorage[config.storeKey] = next;
     };
 
+    const addCurrentUser = () => {
+        const selfId = UserStore?.getCurrentUser?.()?.id;
+        if (!selfId) {
+            showToast("現在のユーザーIDを取得できませんでした", getAssetIDByName("CircleXIcon-primary"));
+            return;
+        }
+        if (store[selfId]) {
+            showToast("すでに除外リストに入っています", getAssetIDByName("CircleCheckIcon-primary"));
+            return;
+        }
+        vstorage[config.storeKey] = { ...store, [selfId]: true };
+        showToast("現在ログイン中のアカウントを除外リストに追加しました", getAssetIDByName("CircleCheckIcon-primary"));
+    };
+
     return (
         <>
             <FormSection title={config.sectionTitle}>
+                {config.quickAddCurrentUser && (
+                    <FormRow
+                        label="今ログイン中のアカウントを除外に追加"
+                        subLabel={UserStore?.getCurrentUser?.()?.id ? `ID: ${UserStore.getCurrentUser().id}` : "IDを取得できません"}
+                        leading={<FormRow.Icon source={getAssetIDByName("UserIcon") ?? getAssetIDByName("PlusLargeIcon")} />}
+                        onPress={addCurrentUser}
+                    />
+                )}
                 <FormInput
                     title={config.idLabel}
                     placeholder={config.idPlaceholder}
@@ -612,6 +635,7 @@ const bulkExceptionsConfig: ToggleSectionConfig = {
     sectionTitle: "一括変更から除外するユーザーを追加",
     idLabel: "ユーザーID",
     idPlaceholder: "例: 123456789012345678",
+    quickAddCurrentUser: true,
     resolveLabel: id => UserStore?.getUser?.(id)?.username ?? id,
 };
 
