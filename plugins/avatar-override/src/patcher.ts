@@ -28,6 +28,7 @@ export const vstorage = storage as {
     countdownTargetMs: number; // target time (epoch ms) for the countdown above; 0 = unset
     countdownLabel: string; // optional label shown alongside the countdown, e.g. "テスト"
     hideReadChannelsGuilds: Record<string, boolean>; // guildId -> channel list only shows unread channels (plus whichever one is open) in that guild
+    hideUnreadIndicatorsGuilds: Record<string, boolean>; // guildId -> suppresses the unread bold/highlight, mention badge count, and server-icon unread dot for that guild
 };
 
 export const STORAGE_KEYS = [
@@ -55,6 +56,7 @@ export const STORAGE_KEYS = [
     "countdownTargetMs",
     "countdownLabel",
     "hideReadChannelsGuilds",
+    "hideUnreadIndicatorsGuilds",
 ] as const;
 
 export const POOP_IMAGES = [
@@ -140,6 +142,7 @@ export default function patchOverrides() {
     vstorage.countdownTargetMs ??= 0;
     vstorage.countdownLabel ??= "";
     vstorage.hideReadChannelsGuilds ??= {};
+    vstorage.hideUnreadIndicatorsGuilds ??= {};
 
     // Every findByProps/findByStoreName lookup below is resolved here, inside
     // patchOverrides() (called at onLoad), rather than at module top-level.
@@ -532,6 +535,33 @@ export default function patchOverrides() {
             if (Array.isArray(result.SELECTABLE)) filtered.SELECTABLE = result.SELECTABLE.filter(keepChannel);
             if (Array.isArray(result.VOCAL)) filtered.VOCAL = result.VOCAL.filter(keepChannel);
             return filtered;
+        }),
+
+        // Suppresses the unread bold/highlight, the mention count badge, and
+        // (since the server-icon unread dot is itself derived by aggregating
+        // these same per-channel signals across a guild, not from a single
+        // separate function) the server icon's unread dot — all in one place,
+        // by making the underlying per-channel unread data report "nothing to
+        // see here" for channels in a registered guild.
+        //
+        // NOTE: the "既読チャンネル非表示" feature above also reads
+        // ReadStateStore.hasUnread — enabling both for the same guild means
+        // every channel there will look read to that filter too, collapsing
+        // the visible channel list down to just the one currently open.
+        ReadStateStore && after("hasUnread", ReadStateStore, ([channelId]) => {
+            if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return false;
+        }),
+
+        ReadStateStore && after("hasUnreadOrMentions", ReadStateStore, ([channelId]) => {
+            if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return false;
+        }),
+
+        ReadStateStore && after("getMentionCount", ReadStateStore, ([channelId]) => {
+            if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return 0;
+        }),
+
+        ReadStateStore && after("getUnreadCount", ReadStateStore, ([channelId]) => {
+            if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return 0;
         }),
     ].filter(Boolean) as (() => void)[];
 

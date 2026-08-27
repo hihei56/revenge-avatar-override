@@ -399,6 +399,14 @@ const hideReadChannelsConfig: ToggleSectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
+const hideUnreadIndicatorsConfig: ToggleSectionConfig = {
+    storeKey: "hideUnreadIndicatorsGuilds",
+    sectionTitle: "未読の光る表示を消すサーバーを追加",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
 type ToggleStoreKey =
     | "roleColorDisabled"
     | "hiddenStatusUsers"
@@ -407,7 +415,8 @@ type ToggleStoreKey =
     | "guildHideAllStatus"
     | "roleDisplayExceptions"
     | "clockChannels"
-    | "hideReadChannelsGuilds";
+    | "hideReadChannelsGuilds"
+    | "hideUnreadIndicatorsGuilds";
 
 interface ToggleSectionConfig {
     storeKey: ToggleStoreKey;
@@ -771,6 +780,16 @@ export default function Settings() {
             <FormSection title="既読チャンネル非表示について">
                 <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
                     登録したサーバーでは、未読メッセージがあるチャンネルと今開いているチャンネルだけがチャンネル一覧に表示され、それ以外は隠れます。ボイスチャンネル・テキストチャンネル両方が対象です。カテゴリ自体は非表示になりません (中身が空でも表示されたままです)。
+                </FormText>
+            </FormSection>
+
+            <ToggleListSection config={hideUnreadIndicatorsConfig} />
+            <FormSection title="未読の光る表示を消すことについて">
+                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                    登録したサーバーでは、チャンネル一覧の太字・白色ハイライト、メンションの赤いバッジ、サーバーアイコンの未読ドットがまとめて消えます (実際のメッセージ既読状態は変わりません、見た目だけです)。
+                </FormText>
+                <FormText style={{ paddingHorizontal: 16, paddingBottom: 16, color: semanticColors.TEXT_FEEDBACK_CRITICAL }}>
+                    注意: 同じサーバーで上の「既読チャンネル非表示」も有効にすると、そのサーバーの全チャンネルが「既読扱い」になるため、今開いているチャンネル以外は一覧から消えます。
                 </FormText>
             </FormSection>
 
