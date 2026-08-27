@@ -521,7 +521,7 @@ export default function patchOverrides() {
         // ShowHiddenChannels plugin filters this exact same return value for a
         // similar purpose. Filtering it here (rather than any rendering
         // component) hides channels without touching unverified UI code.
-        GuildChannelStore && after("getChannels", GuildChannelStore, ([guildId], result) => {
+        typeof GuildChannelStore?.getChannels === "function" && after("getChannels", GuildChannelStore, ([guildId], result) => {
             const hideRead = vstorage.hideReadChannelsGuilds[guildId];
             const allowlistOnly = vstorage.channelAllowlistGuilds[guildId];
             if (!result || (!hideRead && !allowlistOnly)) return;
@@ -557,19 +557,19 @@ export default function patchOverrides() {
         // ReadStateStore.hasUnread — enabling both for the same guild means
         // every channel there will look read to that filter too, collapsing
         // the visible channel list down to just the one currently open.
-        ReadStateStore && after("hasUnread", ReadStateStore, ([channelId]) => {
+        typeof ReadStateStore?.hasUnread === "function" && after("hasUnread", ReadStateStore, ([channelId]) => {
             if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return false;
         }),
 
-        ReadStateStore && after("hasUnreadOrMentions", ReadStateStore, ([channelId]) => {
+        typeof ReadStateStore?.hasUnreadOrMentions === "function" && after("hasUnreadOrMentions", ReadStateStore, ([channelId]) => {
             if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return false;
         }),
 
-        ReadStateStore && after("getMentionCount", ReadStateStore, ([channelId]) => {
+        typeof ReadStateStore?.getMentionCount === "function" && after("getMentionCount", ReadStateStore, ([channelId]) => {
             if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return 0;
         }),
 
-        ReadStateStore && after("getUnreadCount", ReadStateStore, ([channelId]) => {
+        typeof ReadStateStore?.getUnreadCount === "function" && after("getUnreadCount", ReadStateStore, ([channelId]) => {
             if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return 0;
         }),
     ].filter(Boolean) as (() => void)[];
