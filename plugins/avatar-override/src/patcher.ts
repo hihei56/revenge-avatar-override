@@ -76,6 +76,17 @@ const hasAnyKey = (obj: Record<string, unknown>) => {
     return false;
 };
 
+// Shared reference reused every time hideProfileRoles clears a member's
+// roles, instead of a fresh `[]` literal on every single getMember() call.
+// Discord's own channel-permission/visibility computation for a guild is
+// derived from GuildMemberStore.getMember(...).roles, and (like most of the
+// app) is memoized — typically keyed off whether inputs are ===-identical to
+// last time. Handing back a brand-new array every call defeats that even
+// when the content never changes, forcing an expensive permission
+// recalculation on every render — which is exactly what made role-gated
+// channels in particular feel slow to load/scroll.
+const EMPTY_ROLES: string[] = [];
+
 export default function patchOverrides() {
     vstorage.overrides ??= {};
     vstorage.nameOverrides ??= {};
@@ -129,6 +140,7 @@ export default function patchOverrides() {
     // avatar is being rendered in, which is what lets us scope an override to
     // "every webhook/user avatar in this guild".
     const UserRecordProto = UserStore?.getCurrentUser?.()?.constructor?.prototype;
+    const currentUserId: string | undefined = UserStore?.getCurrentUser?.()?.id;
 
     // Webhooks aren't real guild members (no roles, no join date), while an
     // actual bot account is. A bot-flagged user with no GuildMember record in
@@ -355,7 +367,14 @@ export default function patchOverrides() {
             if (nameOverride) member.nick = nameOverride;
 
             if (!vstorage.roleDisplayExceptions[userId]) {
-                if (vstorage.hideProfileRoles) member.roles = [];
+                // Never touch the logged-in user's own roles: Discord derives
+                // real channel-permission/visibility checks from this exact
+                // member record, so clearing it would locally break access to
+                // role-gated channels, not just hide a badge. The role-icon
+                // badge is purely cosmetic, so it's still safe to clear for self.
+                if (vstorage.hideProfileRoles && userId !== currentUserId && member.roles.length > 0) {
+                    member.roles = EMPTY_ROLES;
+                }
                 if (vstorage.hideRoleIcons) member.iconRoleId = null;
             }
         }),
