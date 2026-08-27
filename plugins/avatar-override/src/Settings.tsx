@@ -295,7 +295,7 @@ const guildChannelBulkRenameConfig: SectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
-type ToggleStoreKey = "roleColorDisabled" | "hiddenStatusUsers" | "bulkExceptions";
+type ToggleStoreKey = "roleColorDisabled" | "hiddenStatusUsers" | "bulkExceptions" | "allowedTagGuildIds";
 
 interface ToggleSectionConfig {
     storeKey: ToggleStoreKey;
@@ -400,6 +400,14 @@ const bulkExceptionsConfig: ToggleSectionConfig = {
     resolveLabel: id => UserStore?.getUser?.(id)?.username ?? id,
 };
 
+const allowedTagsConfig: ToggleSectionConfig = {
+    storeKey: "allowedTagGuildIds",
+    sectionTitle: "表示を許可するサーバータグを追加",
+    idLabel: "サーバーID (タグの元サーバー)",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
 export default function Settings() {
     useProxy(vstorage);
 
@@ -429,6 +437,13 @@ export default function Settings() {
 
             <OverrideSection config={guildUserIconConfig} />
             <OverrideSection config={guildUserNameConfig} />
+
+            <ToggleListSection config={allowedTagsConfig} />
+            <FormSection title="サーバータグについて">
+                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                    ここに1つ以上登録すると、登録したサーバー由来のサーバータグ以外は全て非表示になります (メッセージやプロフィールに出るユーザー名の横の小さなタグ)。何も登録しなければ通常通り全て表示されます。
+                </FormText>
+            </FormSection>
 
             <FormSection title="実験的機能">
                 <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>

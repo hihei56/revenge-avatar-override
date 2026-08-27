@@ -15,6 +15,7 @@ export const vstorage = storage as {
     guildUserIconOverrides: Record<string, string>; // guildId -> icon URL applied to all non-bot avatars in that guild
     guildUserNameOverrides: Record<string, string>; // guildId -> display name applied to all non-excepted members in that guild
     bulkExceptions: Record<string, boolean>; // userId -> excluded from every guild-wide bulk override above
+    allowedTagGuildIds: Record<string, boolean>; // guildId -> server tags from this guild are allowed to show (others are hidden). Empty = show all.
 };
 
 export const POOP_IMAGES = [
@@ -65,6 +66,7 @@ export default function patchOverrides() {
     vstorage.guildUserIconOverrides ??= {};
     vstorage.guildUserNameOverrides ??= {};
     vstorage.bulkExceptions ??= {};
+    vstorage.allowedTagGuildIds ??= {};
 
     const unpatches = [
         after("getUser", UserStore, ([id], user) => {
@@ -82,6 +84,12 @@ export default function patchOverrides() {
             if (nameOverride) {
                 user.globalName = nameOverride;
                 user.username = nameOverride;
+            }
+
+            const allowedTags = vstorage.allowedTagGuildIds;
+            const tagGuildId = user.primaryGuild?.identityGuildId;
+            if (tagGuildId && Object.keys(allowedTags).length > 0 && !allowedTags[tagGuildId]) {
+                user.primaryGuild = null;
             }
         }),
 
