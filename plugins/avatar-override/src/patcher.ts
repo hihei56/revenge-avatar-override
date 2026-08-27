@@ -27,6 +27,7 @@ export const vstorage = storage as {
     countdownChannelId: string; // channelId -> shows a live countdown to countdownTargetMs as this channel's name
     countdownTargetMs: number; // target time (epoch ms) for the countdown above; 0 = unset
     countdownLabel: string; // optional label shown alongside the countdown, e.g. "テスト"
+    hideReadChannelsGuilds: Record<string, boolean>; // guildId -> channel list only shows unread channels (plus whichever one is open) in that guild
 };
 
 export const STORAGE_KEYS = [
@@ -53,6 +54,7 @@ export const STORAGE_KEYS = [
     "countdownChannelId",
     "countdownTargetMs",
     "countdownLabel",
+    "hideReadChannelsGuilds",
 ] as const;
 
 export const POOP_IMAGES = [
@@ -137,6 +139,7 @@ export default function patchOverrides() {
     vstorage.countdownChannelId ??= "";
     vstorage.countdownTargetMs ??= 0;
     vstorage.countdownLabel ??= "";
+    vstorage.hideReadChannelsGuilds ??= {};
 
     // Every findByProps/findByStoreName lookup below is resolved here, inside
     // patchOverrides() (called at onLoad), rather than at module top-level.
@@ -155,6 +158,9 @@ export default function patchOverrides() {
     const GuildMemberStore = findByStoreName("GuildMemberStore");
     const ChannelStore = findByStoreName("ChannelStore");
     const PresenceStore = findByStoreName("PresenceStore");
+    const GuildChannelStore = findByStoreName("GuildChannelStore");
+    const ReadStateStore = findByStoreName("ReadStateStore");
+    const SelectedChannelStore = findByStoreName("SelectedChannelStore");
     // Only the guild-aware getAvatarURL(guildId, ...)/getAvatarSource(guildId)
     // instance methods below receive a guild directly (e.g. profile popups).
     // The plain module-level getUserAvatarURL/getUserAvatarSource(user, animate)
@@ -497,6 +503,35 @@ export default function patchOverrides() {
             for (const guildId in vstorage.guildHideAllStatus) {
                 if (vstorage.guildHideAllStatus[guildId] && isRealMember(guildId, id)) return "offline";
             }
+        }),
+
+        // GuildChannelStore.getChannels(guildId) is what actually builds the
+        // grouped, sorted data the channel list sidebar renders from (SELECTABLE
+        // = text/forum/stage channels, VOCAL = voice channels) — confirmed via
+        // Vencord's discord-types GuildChannelStore.d.ts and how its real
+        // ShowHiddenChannels plugin filters this exact same return value for a
+        // similar purpose. Filtering it here (rather than any rendering
+        // component) hides read channels without touching unverified UI code.
+        GuildChannelStore && after("getChannels", GuildChannelStore, ([guildId], result) => {
+            if (!result || !vstorage.hideReadChannelsGuilds[guildId]) return;
+
+            const currentChannelId = SelectedChannelStore?.getChannelId?.(guildId);
+            const keepChannel = (item: any) => {
+                const channelId = item?.channel?.id ?? item?.id;
+                // Fail open (keep it visible) for anything we can't identify,
+                // or if ReadStateStore isn't available at all.
+                if (!channelId || !ReadStateStore?.hasUnread) return true;
+                if (channelId === currentChannelId) return true;
+                return ReadStateStore.hasUnread(channelId);
+            };
+
+            const filtered = { ...result };
+            // Only SELECTABLE/VOCAL are the actual per-channel lists the
+            // sidebar renders; other keys (categories, id, count) are left
+            // untouched so category headers and counts aren't affected.
+            if (Array.isArray(result.SELECTABLE)) filtered.SELECTABLE = result.SELECTABLE.filter(keepChannel);
+            if (Array.isArray(result.VOCAL)) filtered.VOCAL = result.VOCAL.filter(keepChannel);
+            return filtered;
         }),
     ].filter(Boolean) as (() => void)[];
 

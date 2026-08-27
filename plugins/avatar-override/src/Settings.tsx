@@ -391,6 +391,14 @@ const clockChannelsConfig: ToggleSectionConfig = {
     resolveLabel: id => ChannelStore?.getChannel?.(id)?.name ?? id,
 };
 
+const hideReadChannelsConfig: ToggleSectionConfig = {
+    storeKey: "hideReadChannelsGuilds",
+    sectionTitle: "既読チャンネルを非表示にするサーバーを追加",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
 type ToggleStoreKey =
     | "roleColorDisabled"
     | "hiddenStatusUsers"
@@ -398,7 +406,8 @@ type ToggleStoreKey =
     | "allowedTagGuildIds"
     | "guildHideAllStatus"
     | "roleDisplayExceptions"
-    | "clockChannels";
+    | "clockChannels"
+    | "hideReadChannelsGuilds";
 
 interface ToggleSectionConfig {
     storeKey: ToggleStoreKey;
@@ -757,6 +766,13 @@ export default function Settings() {
                 </FormText>
             </FormSection>
             <CountdownSection />
+
+            <ToggleListSection config={hideReadChannelsConfig} />
+            <FormSection title="既読チャンネル非表示について">
+                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                    登録したサーバーでは、未読メッセージがあるチャンネルと今開いているチャンネルだけがチャンネル一覧に表示され、それ以外は隠れます。ボイスチャンネル・テキストチャンネル両方が対象です。カテゴリ自体は非表示になりません (中身が空でも表示されたままです)。
+                </FormText>
+            </FormSection>
 
             <FormSection title="ロール表示">
                 <FormSwitchRow
