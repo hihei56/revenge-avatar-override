@@ -53,13 +53,6 @@ const GuildMemberStore = findByStoreName("GuildMemberStore");
 const ChannelStore = findByStoreName("ChannelStore");
 const PresenceStore = findByStoreName("PresenceStore");
 
-// The `User` record class exposes guild-aware `getAvatarURL(guildId, ...)` /
-// `getAvatarSource(guildId)` instance methods. Unlike the module-level
-// getUserAvatarURL/getUserAvatarSource above, these receive the guild the
-// avatar is being rendered in, which is what lets us scope an override to
-// "every webhook avatar in this guild".
-const UserRecordProto = UserStore?.getCurrentUser?.()?.constructor?.prototype;
-
 // Webhooks aren't real guild members (no roles, no join date), while an
 // actual bot account is. A bot-flagged user with no GuildMember record in
 // this guild is therefore a webhook, not a real bot — this is how we tell
@@ -89,6 +82,17 @@ export default function patchOverrides() {
     vstorage.guildUserNameOverrides ??= {};
     vstorage.bulkExceptions ??= {};
     vstorage.allowedTagGuildIds ??= {};
+
+    // The `User` record class exposes guild-aware `getAvatarURL(guildId, ...)` /
+    // `getAvatarSource(guildId)` instance methods. Unlike the module-level
+    // getUserAvatarURL/getUserAvatarSource above, these receive the guild the
+    // avatar is being rendered in, which is what lets us scope an override to
+    // "every webhook/user avatar in this guild". Resolved here (at onLoad,
+    // when a session is guaranteed to already be active) rather than at
+    // module top-level, since UserStore.getCurrentUser() can still be null
+    // that early during a cold app start and would otherwise permanently
+    // disable this patch for the rest of the session.
+    const UserRecordProto = UserStore?.getCurrentUser?.()?.constructor?.prototype;
 
     const unpatches = [
         after("getUser", UserStore, ([id], user) => {
