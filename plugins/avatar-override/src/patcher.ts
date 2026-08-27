@@ -316,7 +316,16 @@ export default function patchOverrides() {
         }
     };
 
-    forceDeveloperModeOn();
+    // The first call to getDeveloperModeSetting() scans every currently
+    // loaded metro module (with a nested for-in per module) looking for the
+    // one tagged appearance/developerMode — a real, if one-time, cost. Firing
+    // it synchronously here would run it inline with patch registration
+    // itself (onLoad), which can happen while the app is still settling
+    // right after a cold start or a plugin toggle — exactly when a stray
+    // synchronous scan is most likely to be felt as a stutter. Deferred a
+    // tick via setTimeout so it runs after whatever's currently rendering
+    // finishes, instead of blocking it.
+    if (vstorage.keepDeveloperModeOn) setTimeout(forceDeveloperModeOn, 0);
 
     const unpatches = [
         typeof RN?.Image === "function" && before("Image", RN, ([props]: [any]) => {
@@ -625,19 +634,31 @@ export default function patchOverrides() {
         // ReadStateStore.hasUnread — enabling both for the same guild means
         // every channel there will look read to that filter too, collapsing
         // the visible channel list down to just the one currently open.
+        // These four fire on every single unread/mention check for every
+        // channel in every guild you scroll past — one of the hottest patch
+        // points in this whole file. Each previously called
+        // ChannelStore.getChannel(channelId) unconditionally just to read
+        // guild_id, even with hideUnreadIndicatorsGuilds completely empty
+        // (the common case for anyone not using this feature). Bailing out
+        // on a cheap hasAnyKey() check first avoids that store lookup
+        // entirely on the overwhelmingly common "feature unused" path.
         typeof ReadStateStore?.hasUnread === "function" && after("hasUnread", ReadStateStore, ([channelId]) => {
+            if (!hasAnyKey(vstorage.hideUnreadIndicatorsGuilds)) return;
             if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return false;
         }),
 
         typeof ReadStateStore?.hasUnreadOrMentions === "function" && after("hasUnreadOrMentions", ReadStateStore, ([channelId]) => {
+            if (!hasAnyKey(vstorage.hideUnreadIndicatorsGuilds)) return;
             if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return false;
         }),
 
         typeof ReadStateStore?.getMentionCount === "function" && after("getMentionCount", ReadStateStore, ([channelId]) => {
+            if (!hasAnyKey(vstorage.hideUnreadIndicatorsGuilds)) return;
             if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return 0;
         }),
 
         typeof ReadStateStore?.getUnreadCount === "function" && after("getUnreadCount", ReadStateStore, ([channelId]) => {
+            if (!hasAnyKey(vstorage.hideUnreadIndicatorsGuilds)) return;
             if (vstorage.hideUnreadIndicatorsGuilds[ChannelStore?.getChannel?.(channelId)?.guild_id]) return 0;
         }),
     ].filter(Boolean) as (() => void)[];
