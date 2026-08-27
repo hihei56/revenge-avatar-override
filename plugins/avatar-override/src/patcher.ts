@@ -165,6 +165,19 @@ export default function patchOverrides() {
     // safer point to resolve these.
     const avatarUtils = findByProps("getUserAvatarURL", "getUserAvatarSource");
     const guildIconUtils = findByProps("getGuildIconURL", "getGuildIconSource") ?? avatarUtils;
+    // Home header and banner were previously read off guildIconUtils on the
+    // (until now unverified) assumption that every IconUtils-style function
+    // lives on one shared module, same as on desktop. If this mobile bundle's
+    // bundler ever splits them into a different chunk, guildIconUtils.getGuild
+    // HomeHeaderURL/Source would just silently be undefined and that one
+    // feature would never fire no matter what — a total, not intermittent,
+    // failure, which matches "header never changes at all" better than a
+    // race/caching issue would. Resolving each function family through its
+    // own findByProps call (falling back to guildIconUtils if a dedicated
+    // module isn't found, since they usually do live together) removes that
+    // assumption at zero cost.
+    const homeHeaderUtils = findByProps("getGuildHomeHeaderURL", "getGuildHomeHeaderSource") ?? guildIconUtils;
+    const bannerUtils = findByProps("getGuildBannerURL", "getGuildBannerSource") ?? guildIconUtils;
     const UserStore = findByStoreName("UserStore");
     const GuildStore = findByStoreName("GuildStore");
     const GuildMemberStore = findByStoreName("GuildMemberStore");
@@ -463,24 +476,24 @@ export default function patchOverrides() {
         // Wide banner shown above the server name in the channel list drawer
         // (guild.banner) — separate from both the guild icon and the
         // home/guide tab header.
-        typeof guildIconUtils?.getGuildBannerURL === "function" && after("getGuildBannerURL", guildIconUtils, ([first]) => {
+        typeof bannerUtils?.getGuildBannerURL === "function" && after("getGuildBannerURL", bannerUtils, ([first]) => {
             const guildId = extractGuildId(first);
             const override = guildId && vstorage.guildBannerOverrides[guildId];
             return override || undefined;
         }),
 
-        typeof guildIconUtils?.getGuildBannerSource === "function" && after("getGuildBannerSource", guildIconUtils, ([first]) => {
+        typeof bannerUtils?.getGuildBannerSource === "function" && after("getGuildBannerSource", bannerUtils, ([first]) => {
             const guildId = extractGuildId(first);
             const override = guildId && vstorage.guildBannerOverrides[guildId];
             return override ? { uri: override } : undefined;
         }),
 
-        typeof guildIconUtils?.getGuildHomeHeaderURL === "function" && after("getGuildHomeHeaderURL", guildIconUtils, ([first]) => {
+        typeof homeHeaderUtils?.getGuildHomeHeaderURL === "function" && after("getGuildHomeHeaderURL", homeHeaderUtils, ([first]) => {
             const guildId = extractGuildId(first);
             return homeHeaderFor(guildId) || undefined;
         }),
 
-        typeof guildIconUtils?.getGuildHomeHeaderSource === "function" && after("getGuildHomeHeaderSource", guildIconUtils, ([first]) => {
+        typeof homeHeaderUtils?.getGuildHomeHeaderSource === "function" && after("getGuildHomeHeaderSource", homeHeaderUtils, ([first]) => {
             const guildId = extractGuildId(first);
             const override = homeHeaderFor(guildId);
             return override ? { uri: override } : undefined;
