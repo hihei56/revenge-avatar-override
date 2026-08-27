@@ -10,6 +10,7 @@ export const vstorage = storage as {
     guildBotIconOverrides: Record<string, string>; // guildId -> icon URL applied to all bot/webhook avatars in that guild
     roleColorDisabled: Record<string, boolean>; // guildId -> role colors hidden in that guild
     channelNameOverrides: Record<string, string>; // channelId -> channel name
+    hiddenStatusUsers: Record<string, boolean>; // userId -> show as offline regardless of real status
 };
 
 export const POOP_IMAGES = [
@@ -29,6 +30,7 @@ const UserStore = findByStoreName("UserStore");
 const GuildStore = findByStoreName("GuildStore");
 const GuildMemberStore = findByStoreName("GuildMemberStore");
 const ChannelStore = findByStoreName("ChannelStore");
+const PresenceStore = findByStoreName("PresenceStore");
 
 // The `User` record class exposes guild-aware `getAvatarURL(guildId, ...)` /
 // `getAvatarSource(guildId)` instance methods. Unlike the module-level
@@ -54,6 +56,7 @@ export default function patchOverrides() {
     vstorage.guildBotIconOverrides ??= {};
     vstorage.roleColorDisabled ??= {};
     vstorage.channelNameOverrides ??= {};
+    vstorage.hiddenStatusUsers ??= {};
 
     const unpatches = [
         after("getUser", UserStore, ([id], user) => {
@@ -131,6 +134,10 @@ export default function patchOverrides() {
             if (!channel) return;
             const override = vstorage.channelNameOverrides[id];
             if (override) channel.name = override;
+        }),
+
+        PresenceStore && after("getStatus", PresenceStore, ([id]) => {
+            if (vstorage.hiddenStatusUsers[id]) return "offline";
         }),
     ].filter(Boolean) as (() => void)[];
 

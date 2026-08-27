@@ -259,35 +259,46 @@ const channelNameConfig: SectionConfig = {
     resolveLabel: id => ChannelStore?.getChannel?.(id)?.name ?? id,
 };
 
-function RoleColorSection() {
+type ToggleStoreKey = "roleColorDisabled" | "hiddenStatusUsers";
+
+interface ToggleSectionConfig {
+    storeKey: ToggleStoreKey;
+    sectionTitle: string;
+    idLabel: string;
+    idPlaceholder: string;
+    resolveLabel: (id: string) => string;
+}
+
+function ToggleListSection({ config }: { config: ToggleSectionConfig }) {
     const [newId, setNewId] = React.useState("");
     const [error, setError] = React.useState("");
 
-    const entries = Object.keys(vstorage.roleColorDisabled ?? {});
+    const store = vstorage[config.storeKey] ?? {};
+    const entries = Object.keys(store);
 
-    const addGuild = () => {
+    const addEntry = () => {
         const id = newId.trim();
         if (!/^\d{15,25}$/.test(id)) {
-            setError("サーバーIDが正しくありません (数字のみ・15〜25桁)");
+            setError(`${config.idLabel}が正しくありません (数字のみ・15〜25桁)`);
             return;
         }
-        vstorage.roleColorDisabled = { ...vstorage.roleColorDisabled, [id]: true };
+        vstorage[config.storeKey] = { ...store, [id]: true };
         setNewId("");
         setError("");
     };
 
-    const removeGuild = (id: string) => {
-        const next = { ...vstorage.roleColorDisabled };
+    const removeEntry = (id: string) => {
+        const next = { ...vstorage[config.storeKey] };
         delete next[id];
-        vstorage.roleColorDisabled = next;
+        vstorage[config.storeKey] = next;
     };
 
     return (
         <>
-            <FormSection title="ロールカラー無効化サーバーを追加">
+            <FormSection title={config.sectionTitle}>
                 <FormInput
-                    title="サーバーID"
-                    placeholder="例: 123456789012345678"
+                    title={config.idLabel}
+                    placeholder={config.idPlaceholder}
                     value={newId}
                     keyboardType="numeric"
                     onChange={(text: string) => {
@@ -303,7 +314,7 @@ function RoleColorSection() {
                 <FormRow
                     label="追加する"
                     leading={<FormRow.Icon source={getAssetIDByName("PlusLargeIcon")} />}
-                    onPress={addGuild}
+                    onPress={addEntry}
                 />
             </FormSection>
             <FormSection title={`登録済み (${entries.length})`}>
@@ -315,19 +326,35 @@ function RoleColorSection() {
                 {entries.map(id => (
                     <FormSwitchRow
                         key={id}
-                        label={GuildStore?.getGuild?.(id)?.name ?? id}
+                        label={config.resolveLabel(id)}
                         subLabel={`${id} (長押しでリストから削除)`}
-                        value={!!vstorage.roleColorDisabled[id]}
+                        value={!!store[id]}
                         onValueChange={(value: boolean) => {
-                            vstorage.roleColorDisabled = { ...vstorage.roleColorDisabled, [id]: value };
+                            vstorage[config.storeKey] = { ...vstorage[config.storeKey], [id]: value };
                         }}
-                        onLongPress={() => removeGuild(id)}
+                        onLongPress={() => removeEntry(id)}
                     />
                 ))}
             </FormSection>
         </>
     );
 }
+
+const roleColorConfig: ToggleSectionConfig = {
+    storeKey: "roleColorDisabled",
+    sectionTitle: "ロールカラー無効化サーバーを追加",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
+const hiddenStatusConfig: ToggleSectionConfig = {
+    storeKey: "hiddenStatusUsers",
+    sectionTitle: "オンラインステータスを隠すユーザーを追加",
+    idLabel: "ユーザーID",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => UserStore?.getUser?.(id)?.username ?? id,
+};
 
 export default function Settings() {
     useProxy(vstorage);
@@ -345,7 +372,8 @@ export default function Settings() {
             <OverrideSection config={guildIconConfig} />
             <OverrideSection config={guildNameConfig} />
             <OverrideSection config={channelNameConfig} />
-            <RoleColorSection />
+            <ToggleListSection config={roleColorConfig} />
+            <ToggleListSection config={hiddenStatusConfig} />
 
             <FormSection title="実験的機能">
                 <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
