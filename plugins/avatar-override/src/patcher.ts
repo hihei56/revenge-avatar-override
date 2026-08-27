@@ -18,6 +18,22 @@ export const vstorage = storage as {
     allowedTagGuildIds: Record<string, boolean>; // guildId -> server tags from this guild are allowed to show (others are hidden). Empty = show all.
 };
 
+export const STORAGE_KEYS = [
+    "overrides",
+    "nameOverrides",
+    "guildIconOverrides",
+    "guildNameOverrides",
+    "guildBotIconOverrides",
+    "roleColorDisabled",
+    "channelNameOverrides",
+    "hiddenStatusUsers",
+    "guildChannelBulkRename",
+    "guildUserIconOverrides",
+    "guildUserNameOverrides",
+    "bulkExceptions",
+    "allowedTagGuildIds",
+] as const;
+
 export const POOP_IMAGES = [
     "https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f4a9.png",
     "https://raw.githubusercontent.com/googlefonts/noto-emoji/main/png/128/emoji_u1f4a9.png",

@@ -1,11 +1,12 @@
 import { findByStoreName } from "@vendetta/metro";
-import { React, ReactNative as RN } from "@vendetta/metro/common";
+import { clipboard, React, ReactNative as RN } from "@vendetta/metro/common";
 import { useProxy } from "@vendetta/storage";
 import { semanticColors } from "@vendetta/ui";
 import { getAssetIDByName } from "@vendetta/ui/assets";
 import { Forms } from "@vendetta/ui/components";
+import { showToast } from "@vendetta/ui/toasts";
 
-import { pickRandomPoop, vstorage } from "./patcher";
+import { pickRandomPoop, STORAGE_KEYS, vstorage } from "./patcher";
 
 const { FormRow, FormSection, FormText, FormInput, FormSwitchRow } = Forms;
 
@@ -408,6 +409,102 @@ const allowedTagsConfig: ToggleSectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
+function exportSnapshot() {
+    const snapshot: Record<string, unknown> = {};
+    for (const key of STORAGE_KEYS) snapshot[key] = vstorage[key] ?? {};
+    return JSON.stringify(snapshot, null, 2);
+}
+
+function BackupSection() {
+    const [importText, setImportText] = React.useState("");
+    const [error, setError] = React.useState("");
+
+    const doExport = async () => {
+        const json = exportSnapshot();
+        try {
+            clipboard.setString(json);
+            showToast("設定をクリップボードにコピーしました", getAssetIDByName("copy"));
+        } catch {
+            // clipboard API unavailable; sharing below still works
+        }
+        try {
+            await RN.Share.share({ message: json });
+        } catch {
+            // user cancelled the share sheet, or it's unavailable; clipboard copy above already succeeded
+        }
+    };
+
+    const importFrom = (text: string) => {
+        let parsed: Record<string, unknown>;
+        try {
+            parsed = JSON.parse(text);
+        } catch {
+            setError("JSONの読み込みに失敗しました。正しいエクスポートデータか確認してください");
+            return;
+        }
+
+        for (const key of STORAGE_KEYS) {
+            const value = parsed[key];
+            if (value && typeof value === "object") vstorage[key] = value as never;
+        }
+
+        setError("");
+        setImportText("");
+        showToast("設定を読み込みました", getAssetIDByName("CircleCheckIcon-primary"));
+    };
+
+    const importFromClipboard = async () => {
+        try {
+            const text = await clipboard.getString();
+            if (!text) {
+                setError("クリップボードが空です");
+                return;
+            }
+            importFrom(text);
+        } catch {
+            setError("クリップボードの読み取りに失敗しました");
+        }
+    };
+
+    return (
+        <FormSection title="設定のバックアップ">
+            <FormText style={{ padding: 16 }}>
+                現在の全設定をJSONとしてクリップボードにコピー・共有シートから保存したり、以前エクスポートしたJSONを貼り付けて読み込み直したりできます。読み込みは既存の設定に上書きされます (置き換わらないキーはそのまま残ります)。
+            </FormText>
+            <FormRow
+                label="エクスポート (コピー & 共有)"
+                leading={<FormRow.Icon source={getAssetIDByName("ShareIcon") ?? getAssetIDByName("copy")} />}
+                onPress={doExport}
+            />
+            <FormRow
+                label="クリップボードから読み込む"
+                leading={<FormRow.Icon source={getAssetIDByName("PasteIcon") ?? getAssetIDByName("copy")} />}
+                onPress={importFromClipboard}
+            />
+            <FormInput
+                title="または貼り付けて読み込む"
+                placeholder="エクスポートしたJSONをここに貼り付け"
+                value={importText}
+                multiline
+                onChange={(text: string) => {
+                    setImportText(text);
+                    setError("");
+                }}
+            />
+            {!!error && (
+                <FormText style={{ color: semanticColors.TEXT_FEEDBACK_CRITICAL, paddingHorizontal: 16, paddingBottom: 8 }}>
+                    {error}
+                </FormText>
+            )}
+            <FormRow
+                label="貼り付けた内容を読み込む"
+                leading={<FormRow.Icon source={getAssetIDByName("CircleCheckIcon-primary")} />}
+                onPress={() => importFrom(importText)}
+            />
+        </FormSection>
+    );
+}
+
 export default function Settings() {
     useProxy(vstorage);
 
@@ -418,6 +515,8 @@ export default function Settings() {
                     ユーザーやサーバーのIDを登録すると、アバター・表示名・サーバーアイコン・サーバー名があなたの端末上でのみ指定した内容に置き換わります。相手や他のユーザーには一切送信・共有されません。項目をタップすると編集・削除できます。
                 </FormText>
             </FormSection>
+
+            <BackupSection />
 
             <OverrideSection config={avatarConfig} />
             <OverrideSection config={nameConfig} />
