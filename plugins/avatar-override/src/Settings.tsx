@@ -52,6 +52,60 @@ async function pickImageFile(): Promise<string | undefined> {
     return undefined;
 }
 
+// Shared by every guild-ID field (OverrideSection's AddRow and
+// ToggleListSection) so a server can be picked from the list of joined
+// guilds instead of typing/pasting a raw ID — useful once someone is in
+// enough servers that finding a specific ID by hand gets tedious.
+function GuildPickerRow({ onSelect }: { onSelect: (id: string) => void }) {
+    const [expanded, setExpanded] = React.useState(false);
+    const [query, setQuery] = React.useState("");
+
+    if (!expanded) {
+        return (
+            <FormRow
+                label="サーバーから選ぶ"
+                leading={<FormRow.Icon source={getAssetIDByName("ListBulletsIcon") ?? getAssetIDByName("PencilIcon")} />}
+                trailing={<FormRow.Arrow />}
+                onPress={() => setExpanded(true)}
+            />
+        );
+    }
+
+    const guilds: any[] = GuildStore?.getGuildsArray?.() ?? [];
+    const q = query.trim().toLowerCase();
+    const filtered = (q ? guilds.filter(g => g.name?.toLowerCase().includes(q) || g.id.includes(q)) : guilds)
+        .slice()
+        .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+
+    return (
+        <>
+            <FormRow
+                label="閉じる"
+                leading={<FormRow.Icon source={getAssetIDByName("CircleXIcon-primary")} />}
+                onPress={() => { setExpanded(false); setQuery(""); }}
+            />
+            <FormInput
+                placeholder="サーバー名で検索"
+                value={query}
+                onChange={setQuery}
+            />
+            {filtered.length === 0 && (
+                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                    一致するサーバーが見つかりません
+                </FormText>
+            )}
+            {filtered.map(g => (
+                <FormRow
+                    key={g.id}
+                    label={g.name ?? g.id}
+                    subLabel={g.id}
+                    onPress={() => { onSelect(g.id); setExpanded(false); setQuery(""); }}
+                />
+            ))}
+        </>
+    );
+}
+
 type StoreKey =
     | "overrides"
     | "nameOverrides"
@@ -84,6 +138,7 @@ interface SectionConfig {
     valuePlaceholder: string;
     isImage?: boolean;
     allowBlankRandomPoop?: boolean;
+    pickGuild?: boolean;
     resolveLabel: (id: string) => string;
 }
 
@@ -128,6 +183,9 @@ function AddRow({ config }: { config: SectionConfig }) {
                     setError("");
                 }}
             />
+            {config.pickGuild && (
+                <GuildPickerRow onSelect={(guildId) => { setId(guildId); setError(""); }} />
+            )}
             <FormInput
                 title={config.valueLabel}
                 placeholder={config.allowBlankRandomPoop
@@ -293,6 +351,7 @@ const guildIconConfig: SectionConfig = {
     valueLabel: "画像URL",
     valuePlaceholder: "https://example.com/icon.png",
     isImage: true,
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -307,6 +366,7 @@ const guildBannerConfig: SectionConfig = {
     valueLabel: "画像URL",
     valuePlaceholder: "https://example.com/banner.png",
     isImage: true,
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -318,6 +378,7 @@ const guildHomeHeaderConfig: SectionConfig = {
     valueLabel: "画像URL",
     valuePlaceholder: "https://example.com/header.png",
     isImage: true,
+    pickGuild: true,
     resolveLabel: id => (id === "default" ? "🌐 全サーバー共通" : GuildStore?.getGuild?.(id)?.name ?? id),
 };
 
@@ -328,6 +389,7 @@ const guildNameConfig: SectionConfig = {
     idPlaceholder: "例: 123456789012345678",
     valueLabel: "サーバー名",
     valuePlaceholder: "表示させたいサーバー名",
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -340,6 +402,7 @@ const guildBotIconConfig: SectionConfig = {
     valuePlaceholder: "https://example.com/icon.png",
     isImage: true,
     allowBlankRandomPoop: true,
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -352,6 +415,7 @@ const guildUserIconConfig: SectionConfig = {
     valuePlaceholder: "https://example.com/icon.png",
     isImage: true,
     allowBlankRandomPoop: true,
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -362,6 +426,7 @@ const guildUserNameConfig: SectionConfig = {
     idPlaceholder: "例: 123456789012345678",
     valueLabel: "表示名 (全員共通)",
     valuePlaceholder: "例: うんこ",
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -382,6 +447,7 @@ const guildChannelBulkRenameConfig: SectionConfig = {
     idPlaceholder: "例: 123456789012345678",
     valueLabel: "チャンネル名 (全チャンネル共通)",
     valuePlaceholder: "例: うんこ",
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -398,6 +464,7 @@ const hideReadChannelsConfig: ToggleSectionConfig = {
     sectionTitle: "既読チャンネルを非表示にするサーバーを追加",
     idLabel: "サーバーID",
     idPlaceholder: "例: 123456789012345678",
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -406,6 +473,7 @@ const hideUnreadIndicatorsConfig: ToggleSectionConfig = {
     sectionTitle: "未読の光る表示を消すサーバーを追加",
     idLabel: "サーバーID",
     idPlaceholder: "例: 123456789012345678",
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -414,6 +482,7 @@ const channelAllowlistConfig: ToggleSectionConfig = {
     sectionTitle: "指定チャンネルのみ表示するサーバーを追加",
     idLabel: "サーバーID",
     idPlaceholder: "例: 123456789012345678",
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -443,6 +512,7 @@ interface ToggleSectionConfig {
     sectionTitle: string;
     idLabel: string;
     idPlaceholder: string;
+    pickGuild?: boolean;
     resolveLabel: (id: string) => string;
 }
 
@@ -483,6 +553,9 @@ function ToggleListSection({ config }: { config: ToggleSectionConfig }) {
                         setError("");
                     }}
                 />
+                {config.pickGuild && (
+                    <GuildPickerRow onSelect={(guildId) => { setNewId(guildId); setError(""); }} />
+                )}
                 {!!error && (
                     <FormText style={{ color: semanticColors.TEXT_FEEDBACK_CRITICAL, paddingHorizontal: 16, paddingBottom: 8 }}>
                         {error}
@@ -522,6 +595,7 @@ const roleColorConfig: ToggleSectionConfig = {
     sectionTitle: "ロールカラー無効化サーバーを追加",
     idLabel: "サーバーID",
     idPlaceholder: "例: 123456789012345678",
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -546,6 +620,7 @@ const guildHideAllStatusConfig: ToggleSectionConfig = {
     sectionTitle: "サーバー内全員をオフライン扱いにするサーバーを追加",
     idLabel: "サーバーID",
     idPlaceholder: "例: 123456789012345678",
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
@@ -562,6 +637,7 @@ const allowedTagsConfig: ToggleSectionConfig = {
     sectionTitle: "表示を許可するサーバータグを追加",
     idLabel: "サーバーID (タグの元サーバー)",
     idPlaceholder: "例: 123456789012345678",
+    pickGuild: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
