@@ -1,5 +1,7 @@
+import { logger } from "@vendetta";
 import { findByProps, findByStoreName } from "@vendetta/metro";
-import { after } from "@vendetta/patcher";
+import { ReactNative as RN } from "@vendetta/metro/common";
+import { after, before } from "@vendetta/patcher";
 import { storage } from "@vendetta/plugin";
 
 export const vstorage = storage as {
@@ -17,6 +19,7 @@ export const vstorage = storage as {
     bulkExceptions: Record<string, boolean>; // userId -> excluded from every guild-wide bulk override above
     allowedTagGuildIds: Record<string, boolean>; // guildId -> server tags from this guild are allowed to show (others are hidden). Empty = show all.
     guildHideAllStatus: Record<string, boolean>; // guildId -> every member of this guild shows as offline (everywhere — status is global, not per-guild, data)
+    guildHomeHeaderOverrides: Record<string, string>; // guildId -> home/guide tab header image URL
 };
 
 export const STORAGE_KEYS = [
@@ -34,6 +37,7 @@ export const STORAGE_KEYS = [
     "bulkExceptions",
     "allowedTagGuildIds",
     "guildHideAllStatus",
+    "guildHomeHeaderOverrides",
 ] as const;
 
 export const POOP_IMAGES = [
@@ -70,6 +74,7 @@ export default function patchOverrides() {
     vstorage.bulkExceptions ??= {};
     vstorage.allowedTagGuildIds ??= {};
     vstorage.guildHideAllStatus ??= {};
+    vstorage.guildHomeHeaderOverrides ??= {};
 
     // Every findByProps/findByStoreName lookup below is resolved here, inside
     // patchOverrides() (called at onLoad), rather than at module top-level.
@@ -83,6 +88,11 @@ export default function patchOverrides() {
     // safer point to resolve these.
     const avatarUtils = findByProps("getUserAvatarURL", "getUserAvatarSource");
     const guildIconUtils = findByProps("getGuildIconURL", "getGuildIconSource") ?? avatarUtils;
+    logger.log(
+        `[AvatarOverride] guildIconUtils found=${!!guildIconUtils} ` +
+        `getGuildIconURL=${typeof guildIconUtils?.getGuildIconURL} ` +
+        `getGuildIconSource=${typeof guildIconUtils?.getGuildIconSource}`,
+    );
     const UserStore = findByStoreName("UserStore");
     const GuildStore = findByStoreName("GuildStore");
     const GuildMemberStore = findByStoreName("GuildMemberStore");
@@ -119,8 +129,32 @@ export default function patchOverrides() {
     // better than a timing bug would. Handle both shapes defensively.
     const extractGuildId = (first: unknown): string | undefined => {
         if (typeof first === "string") return first;
-        if (first && typeof first === "object" && typeof (first as any).id === "string") return (first as any).id;
+        if (first && typeof first === "object") {
+            const obj = first as any;
+            if (typeof obj.id === "string") return obj.id;
+            // Some call sites pass a wrapper object ({ guild: {...} }) instead
+            // of the Guild record directly.
+            if (obj.guild && typeof obj.guild.id === "string") return obj.guild.id;
+            if (typeof obj.guildId === "string") return obj.guildId;
+        }
         return undefined;
+    };
+
+    // Whether an override for this guild icon is even configured is cheap to
+    // check, so this only logs when it could plausibly matter — once per
+    // distinct raw argument shape seen, to help diagnose reports of the
+    // override silently not applying without spamming logs on every render.
+    const loggedIconShapes = new Set<string>();
+    const debugIconArg = (label: string, first: unknown, guildId: string | undefined) => {
+        if (Object.keys(vstorage.guildIconOverrides).length === 0) return;
+        const shapeKey = `${label}:${typeof first}:${guildId ?? "none"}`;
+        if (loggedIconShapes.has(shapeKey)) return;
+        loggedIconShapes.add(shapeKey);
+        try {
+            logger.log(`[AvatarOverride] ${label} arg=${JSON.stringify(first)} resolvedGuildId=${guildId}`);
+        } catch {
+            logger.log(`[AvatarOverride] ${label} arg=<unserializable ${typeof first}> resolvedGuildId=${guildId}`);
+        }
     };
 
     // Shared by both the guild-aware instance methods and the plain
@@ -135,7 +169,45 @@ export default function patchOverrides() {
         return vstorage.guildUserIconOverrides[guildId] || undefined;
     };
 
+    // A "default" entry in guildHomeHeaderOverrides is a reserved sentinel
+    // key (not a real guild ID) meaning "every guild without its own explicit
+    // entry" — this is how the header override supports being set either
+    // per-guild or in common across every guild, without needing a second
+    // non-Record field (which the generic STORAGE_KEYS-driven export/import
+    // in Settings.tsx only handles for Record values).
+    const homeHeaderFor = (guildId: string | undefined) =>
+        (guildId && vstorage.guildHomeHeaderOverrides[guildId]) || vstorage.guildHomeHeaderOverrides.default || undefined;
+
+    // Belt-and-suspenders fallback for the guild icon/home-header overrides
+    // above: rather than trusting an assumed argument shape for
+    // getGuildIconURL/getGuildIconSource/getGuildHomeHeaderURL/Source (which
+    // has not reliably applied to every guild icon surface — rail, header,
+    // etc. — on this mobile build), this matches the actual Discord CDN URL
+    // once it reaches React Native's own `Image` component and rewrites it
+    // directly. This is the same technique nexpid's published twemoji-everywhere
+    // plugin uses (`before("Image", RN, ...)`) to universally rewrite image
+    // URIs regardless of which internal function produced them.
+    const GUILD_ICON_URI_RE = /(?:cdn\.discordapp\.com|media\.discordapp\.net)\/icons\/(\d{15,25})\//;
+    const GUILD_HOME_HEADER_URI_RE = /(?:cdn\.discordapp\.com|media\.discordapp\.net)\/guilds\/(\d{15,25})\/home-headers\//;
+
     const unpatches = [
+        typeof RN?.Image === "function" && before("Image", RN, ([props]: [any]) => {
+            const uri: string | undefined = props?.source?.uri;
+            if (!uri) return;
+
+            const iconMatch = uri.match(GUILD_ICON_URI_RE);
+            const iconOverride = iconMatch && vstorage.guildIconOverrides[iconMatch[1]];
+            if (iconOverride) {
+                return [{ ...props, source: { ...props.source, uri: iconOverride } }];
+            }
+
+            const headerMatch = uri.match(GUILD_HOME_HEADER_URI_RE);
+            const headerOverride = headerMatch && homeHeaderFor(headerMatch[1]);
+            if (headerOverride) {
+                return [{ ...props, source: { ...props.source, uri: headerOverride } }];
+            }
+        }),
+
         UserStore && after("getUser", UserStore, ([id], user) => {
             if (!user) return;
 
@@ -188,15 +260,28 @@ export default function patchOverrides() {
             return { uri };
         }),
 
-        guildIconUtils && after("getGuildIconURL", guildIconUtils, ([first]) => {
+        typeof guildIconUtils?.getGuildIconURL === "function" && after("getGuildIconURL", guildIconUtils, ([first]) => {
             const guildId = extractGuildId(first);
+            debugIconArg("getGuildIconURL", first, guildId);
             const override = guildId && vstorage.guildIconOverrides[guildId];
             return override || undefined;
         }),
 
-        guildIconUtils && after("getGuildIconSource", guildIconUtils, ([first]) => {
+        typeof guildIconUtils?.getGuildIconSource === "function" && after("getGuildIconSource", guildIconUtils, ([first]) => {
             const guildId = extractGuildId(first);
+            debugIconArg("getGuildIconSource", first, guildId);
             const override = guildId && vstorage.guildIconOverrides[guildId];
+            return override ? { uri: override } : undefined;
+        }),
+
+        typeof guildIconUtils?.getGuildHomeHeaderURL === "function" && after("getGuildHomeHeaderURL", guildIconUtils, ([first]) => {
+            const guildId = extractGuildId(first);
+            return homeHeaderFor(guildId) || undefined;
+        }),
+
+        typeof guildIconUtils?.getGuildHomeHeaderSource === "function" && after("getGuildHomeHeaderSource", guildIconUtils, ([first]) => {
+            const guildId = extractGuildId(first);
+            const override = homeHeaderFor(guildId);
             return override ? { uri: override } : undefined;
         }),
 

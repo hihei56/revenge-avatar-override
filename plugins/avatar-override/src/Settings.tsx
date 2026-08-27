@@ -59,7 +59,8 @@ type StoreKey =
     | "channelNameOverrides"
     | "guildChannelBulkRename"
     | "guildUserIconOverrides"
-    | "guildUserNameOverrides";
+    | "guildUserNameOverrides"
+    | "guildHomeHeaderOverrides";
 
 const setEntry = (key: StoreKey, id: string, value: string) => {
     vstorage[key] = { ...vstorage[key], [id]: value.trim() };
@@ -290,6 +291,17 @@ const guildIconConfig: SectionConfig = {
     valuePlaceholder: "https://example.com/icon.png",
     isImage: true,
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
+const guildHomeHeaderConfig: SectionConfig = {
+    storeKey: "guildHomeHeaderOverrides",
+    sectionTitle: "サーバーホームヘッダー画像を追加",
+    idLabel: "サーバーID (全サーバー共通にする場合は default と入力)",
+    idPlaceholder: "例: 123456789012345678 / default",
+    valueLabel: "画像URL",
+    valuePlaceholder: "https://example.com/header.png",
+    isImage: true,
+    resolveLabel: id => (id === "default" ? "🌐 全サーバー共通" : GuildStore?.getGuild?.(id)?.name ?? id),
 };
 
 const guildNameConfig: SectionConfig = {
@@ -594,6 +606,7 @@ export default function Settings() {
             <OverrideSection config={avatarConfig} />
             <OverrideSection config={nameConfig} />
             <OverrideSection config={guildIconConfig} />
+            <OverrideSection config={guildHomeHeaderConfig} />
             <OverrideSection config={guildNameConfig} />
             <OverrideSection config={channelNameConfig} />
             <OverrideSection config={guildChannelBulkRenameConfig} />
