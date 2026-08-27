@@ -204,16 +204,30 @@ export default function patchOverrides() {
             const uri: string | undefined = props?.source?.uri;
             if (!uri) return;
 
-            const iconMatch = uri.match(GUILD_ICON_URI_RE);
-            const iconOverride = iconMatch && vstorage.guildIconOverrides[iconMatch[1]];
-            if (iconOverride) {
-                return [{ ...props, source: { ...props.source, uri: iconOverride } }];
+            // This runs on every single Image in the whole app — every
+            // avatar, attachment, emoji, sticker — not just guild icons, so
+            // it needs to bail out as cheaply as possible for the
+            // overwhelming majority of calls that have nothing to do with
+            // this feature, before ever touching a regex.
+            const hasIconOverrides = Object.keys(vstorage.guildIconOverrides).length > 0;
+            const hasHeaderOverrides = Object.keys(vstorage.guildHomeHeaderOverrides).length > 0;
+            if (!hasIconOverrides && !hasHeaderOverrides) return;
+            if (uri.indexOf("/icons/") === -1 && uri.indexOf("/home-headers/") === -1) return;
+
+            if (hasIconOverrides) {
+                const iconMatch = uri.match(GUILD_ICON_URI_RE);
+                const iconOverride = iconMatch && vstorage.guildIconOverrides[iconMatch[1]];
+                if (iconOverride) {
+                    return [{ ...props, source: { ...props.source, uri: iconOverride } }];
+                }
             }
 
-            const headerMatch = uri.match(GUILD_HOME_HEADER_URI_RE);
-            const headerOverride = headerMatch && homeHeaderFor(headerMatch[1]);
-            if (headerOverride) {
-                return [{ ...props, source: { ...props.source, uri: headerOverride } }];
+            if (hasHeaderOverrides) {
+                const headerMatch = uri.match(GUILD_HOME_HEADER_URI_RE);
+                const headerOverride = headerMatch && homeHeaderFor(headerMatch[1]);
+                if (headerOverride) {
+                    return [{ ...props, source: { ...props.source, uri: headerOverride } }];
+                }
             }
         }),
 
