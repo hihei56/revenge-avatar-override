@@ -39,7 +39,7 @@
 - `getGuildIconURL` / `getGuildIconSource` → サーバーアイコン
 - `GuildStore.getGuild` → サーバー名
 - `ChannelStore.getChannel` → チャンネル名 (個別指定 / サーバー単位の一括指定)
-- `GuildMemberStore.getMember` の `colorString` / `colorRoleId` を消去、`nick` を上書き → ロールカラー無効化 / サーバー内全ユーザーの表示名一括変更
+- `GuildMemberStore.getMember` の `colorString` / `colorRoleId` / `colorStrings` (グラデーションロール用) を消去、`nick` を上書き → ロールカラー無効化 / サーバー内全ユーザーの表示名一括変更
 - `PresenceStore.getStatus` → オンラインステータス非表示 (登録ユーザーは常に`offline`を返す)
 - `User`インスタンスの`getAvatarURL(guildId, ...)` / `getAvatarSource(guildId)` → サーバー内の全ユーザー/Bot・webhookアイコン一括変更 (`bot`フラグの有無で対象を振り分け、個別のアバター上書きと除外ユーザーは対象外)
 

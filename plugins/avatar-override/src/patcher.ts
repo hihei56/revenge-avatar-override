@@ -148,6 +148,8 @@ export default function patchOverrides() {
             if (vstorage.roleColorDisabled[guildId]) {
                 member.colorString = null;
                 member.colorRoleId = null;
+                // Gradient role colors are stored separately from colorString/colorRoleId.
+                member.colorStrings = null;
             }
 
             const nameOverride = !vstorage.bulkExceptions[userId] && vstorage.guildUserNameOverrides[guildId];
