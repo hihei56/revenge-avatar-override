@@ -29,6 +29,8 @@ export const vstorage = storage as {
     countdownLabel: string; // optional label shown alongside the countdown, e.g. "テスト"
     hideReadChannelsGuilds: Record<string, boolean>; // guildId -> channel list only shows unread channels (plus whichever one is open) in that guild
     hideUnreadIndicatorsGuilds: Record<string, boolean>; // guildId -> suppresses the unread bold/highlight, mention badge count, and server-icon unread dot for that guild
+    channelAllowlistGuilds: Record<string, boolean>; // guildId -> channel list only shows channels registered in allowedChannelIds (plus whichever one is open) in that guild
+    allowedChannelIds: Record<string, boolean>; // channelId -> stays visible when its guild has channelAllowlistGuilds enabled
 };
 
 export const STORAGE_KEYS = [
@@ -57,6 +59,8 @@ export const STORAGE_KEYS = [
     "countdownLabel",
     "hideReadChannelsGuilds",
     "hideUnreadIndicatorsGuilds",
+    "channelAllowlistGuilds",
+    "allowedChannelIds",
 ] as const;
 
 export const POOP_IMAGES = [
@@ -143,6 +147,8 @@ export default function patchOverrides() {
     vstorage.countdownLabel ??= "";
     vstorage.hideReadChannelsGuilds ??= {};
     vstorage.hideUnreadIndicatorsGuilds ??= {};
+    vstorage.channelAllowlistGuilds ??= {};
+    vstorage.allowedChannelIds ??= {};
 
     // Every findByProps/findByStoreName lookup below is resolved here, inside
     // patchOverrides() (called at onLoad), rather than at module top-level.
@@ -514,18 +520,21 @@ export default function patchOverrides() {
         // Vencord's discord-types GuildChannelStore.d.ts and how its real
         // ShowHiddenChannels plugin filters this exact same return value for a
         // similar purpose. Filtering it here (rather than any rendering
-        // component) hides read channels without touching unverified UI code.
+        // component) hides channels without touching unverified UI code.
         GuildChannelStore && after("getChannels", GuildChannelStore, ([guildId], result) => {
-            if (!result || !vstorage.hideReadChannelsGuilds[guildId]) return;
+            const hideRead = vstorage.hideReadChannelsGuilds[guildId];
+            const allowlistOnly = vstorage.channelAllowlistGuilds[guildId];
+            if (!result || (!hideRead && !allowlistOnly)) return;
 
             const currentChannelId = SelectedChannelStore?.getChannelId?.(guildId);
             const keepChannel = (item: any) => {
                 const channelId = item?.channel?.id ?? item?.id;
-                // Fail open (keep it visible) for anything we can't identify,
-                // or if ReadStateStore isn't available at all.
-                if (!channelId || !ReadStateStore?.hasUnread) return true;
+                // Fail open (keep it visible) for anything we can't identify.
+                if (!channelId) return true;
                 if (channelId === currentChannelId) return true;
-                return ReadStateStore.hasUnread(channelId);
+                if (hideRead && !(ReadStateStore?.hasUnread?.(channelId) ?? true)) return false;
+                if (allowlistOnly && !vstorage.allowedChannelIds[channelId]) return false;
+                return true;
             };
 
             const filtered = { ...result };

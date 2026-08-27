@@ -407,6 +407,22 @@ const hideUnreadIndicatorsConfig: ToggleSectionConfig = {
     resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
 };
 
+const channelAllowlistConfig: ToggleSectionConfig = {
+    storeKey: "channelAllowlistGuilds",
+    sectionTitle: "指定チャンネルのみ表示するサーバーを追加",
+    idLabel: "サーバーID",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => GuildStore?.getGuild?.(id)?.name ?? id,
+};
+
+const allowedChannelsConfig: ToggleSectionConfig = {
+    storeKey: "allowedChannelIds",
+    sectionTitle: "表示を許可するチャンネルを追加",
+    idLabel: "チャンネルID",
+    idPlaceholder: "例: 123456789012345678",
+    resolveLabel: id => ChannelStore?.getChannel?.(id)?.name ?? id,
+};
+
 type ToggleStoreKey =
     | "roleColorDisabled"
     | "hiddenStatusUsers"
@@ -416,7 +432,9 @@ type ToggleStoreKey =
     | "roleDisplayExceptions"
     | "clockChannels"
     | "hideReadChannelsGuilds"
-    | "hideUnreadIndicatorsGuilds";
+    | "hideUnreadIndicatorsGuilds"
+    | "channelAllowlistGuilds"
+    | "allowedChannelIds";
 
 interface ToggleSectionConfig {
     storeKey: ToggleStoreKey;
@@ -790,6 +808,14 @@ export default function Settings() {
                 </FormText>
                 <FormText style={{ paddingHorizontal: 16, paddingBottom: 16, color: semanticColors.TEXT_FEEDBACK_CRITICAL }}>
                     注意: 同じサーバーで上の「既読チャンネル非表示」も有効にすると、そのサーバーの全チャンネルが「既読扱い」になるため、今開いているチャンネル以外は一覧から消えます。
+                </FormText>
+            </FormSection>
+
+            <ToggleListSection config={channelAllowlistConfig} />
+            <ToggleListSection config={allowedChannelsConfig} />
+            <FormSection title="指定チャンネルのみ表示について">
+                <FormText style={{ padding: 16, color: semanticColors.TEXT_MUTED }}>
+                    サーバーを登録すると、そのサーバーのチャンネル一覧が「表示を許可するチャンネル」に登録したものと、今開いているチャンネルだけに絞り込まれます。チャンネルが多いサーバーで、よく使うチャンネルだけ見たい場合に使えます。「表示を許可するチャンネル」はサーバーを問わず共通のリストです。
                 </FormText>
             </FormSection>
 
