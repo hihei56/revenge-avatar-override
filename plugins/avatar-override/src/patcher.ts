@@ -45,21 +45,6 @@ export const POOP_IMAGES = [
 
 export const pickRandomPoop = () => POOP_IMAGES[Math.floor(Math.random() * POOP_IMAGES.length)];
 
-const avatarUtils = findByProps("getUserAvatarURL", "getUserAvatarSource");
-const guildIconUtils = findByProps("getGuildIconURL", "getGuildIconSource") ?? avatarUtils;
-const UserStore = findByStoreName("UserStore");
-const GuildStore = findByStoreName("GuildStore");
-const GuildMemberStore = findByStoreName("GuildMemberStore");
-const ChannelStore = findByStoreName("ChannelStore");
-const PresenceStore = findByStoreName("PresenceStore");
-
-// Webhooks aren't real guild members (no roles, no join date), while an
-// actual bot account is. A bot-flagged user with no GuildMember record in
-// this guild is therefore a webhook, not a real bot — this is how we tell
-// them apart without needing the Message object (which isn't available at
-// this patch point).
-const isRealMember = (guildId: string, userId: string) => !!GuildMemberStore?.getMember?.(guildId, userId);
-
 const urlExt = (url: string) => {
     try {
         return new URL(url).pathname.split(".").pop()?.toLowerCase();
@@ -83,19 +68,40 @@ export default function patchOverrides() {
     vstorage.bulkExceptions ??= {};
     vstorage.allowedTagGuildIds ??= {};
 
+    // Every findByProps/findByStoreName lookup below is resolved here, inside
+    // patchOverrides() (called at onLoad), rather than at module top-level.
+    // Metro modules can still be un-loaded chunks at the instant a plugin's
+    // top-level code runs (e.g. right after a cold app start, before the
+    // relevant screen has ever mounted) — a plain, one-shot findByProps at
+    // that moment can silently return undefined and permanently disable a
+    // patch for the rest of the session, even though the same lookup would
+    // succeed a moment later. onLoad, running after a session is already
+    // active and plugins are toggled from a live Settings screen, is a much
+    // safer point to resolve these.
+    const avatarUtils = findByProps("getUserAvatarURL", "getUserAvatarSource");
+    const guildIconUtils = findByProps("getGuildIconURL", "getGuildIconSource") ?? avatarUtils;
+    const UserStore = findByStoreName("UserStore");
+    const GuildStore = findByStoreName("GuildStore");
+    const GuildMemberStore = findByStoreName("GuildMemberStore");
+    const ChannelStore = findByStoreName("ChannelStore");
+    const PresenceStore = findByStoreName("PresenceStore");
+
     // The `User` record class exposes guild-aware `getAvatarURL(guildId, ...)` /
     // `getAvatarSource(guildId)` instance methods. Unlike the module-level
     // getUserAvatarURL/getUserAvatarSource above, these receive the guild the
     // avatar is being rendered in, which is what lets us scope an override to
-    // "every webhook/user avatar in this guild". Resolved here (at onLoad,
-    // when a session is guaranteed to already be active) rather than at
-    // module top-level, since UserStore.getCurrentUser() can still be null
-    // that early during a cold app start and would otherwise permanently
-    // disable this patch for the rest of the session.
+    // "every webhook/user avatar in this guild".
     const UserRecordProto = UserStore?.getCurrentUser?.()?.constructor?.prototype;
 
+    // Webhooks aren't real guild members (no roles, no join date), while an
+    // actual bot account is. A bot-flagged user with no GuildMember record in
+    // this guild is therefore a webhook, not a real bot — this is how we tell
+    // them apart without needing the Message object (which isn't available at
+    // this patch point).
+    const isRealMember = (guildId: string, userId: string) => !!GuildMemberStore?.getMember?.(guildId, userId);
+
     const unpatches = [
-        after("getUser", UserStore, ([id], user) => {
+        UserStore && after("getUser", UserStore, ([id], user) => {
             if (!user) return;
 
             const avatarOverride = vstorage.overrides[id];
@@ -119,7 +125,7 @@ export default function patchOverrides() {
             }
         }),
 
-        after("getUserAvatarURL", avatarUtils, ([user, animate]) => {
+        avatarUtils && after("getUserAvatarURL", avatarUtils, ([user, animate]) => {
             const override = user?.id && vstorage.overrides[user.id];
             if (!override) return;
 
@@ -129,7 +135,7 @@ export default function patchOverrides() {
             return override;
         }),
 
-        after("getUserAvatarSource", avatarUtils, ([user, animate]) => {
+        avatarUtils && after("getUserAvatarSource", avatarUtils, ([user, animate]) => {
             const override = user?.id && vstorage.overrides[user.id];
             if (!override) return;
 
@@ -139,17 +145,17 @@ export default function patchOverrides() {
             return { uri };
         }),
 
-        after("getGuildIconURL", guildIconUtils, ([data]) => {
+        guildIconUtils && after("getGuildIconURL", guildIconUtils, ([data]) => {
             const override = data?.id && vstorage.guildIconOverrides[data.id];
             return override || undefined;
         }),
 
-        after("getGuildIconSource", guildIconUtils, ([data]) => {
+        guildIconUtils && after("getGuildIconSource", guildIconUtils, ([data]) => {
             const override = data?.id && vstorage.guildIconOverrides[data.id];
             return override ? { uri: override } : undefined;
         }),
 
-        after("getGuild", GuildStore, ([id], guild) => {
+        GuildStore && after("getGuild", GuildStore, ([id], guild) => {
             if (!guild) return;
             const override = vstorage.guildNameOverrides[id];
             if (override) guild.name = override;
