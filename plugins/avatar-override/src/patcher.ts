@@ -208,7 +208,27 @@ export default function patchOverrides() {
     // this guild is therefore a webhook, not a real bot — this is how we tell
     // them apart without needing the Message object (which isn't available at
     // this patch point).
-    const isRealMember = (guildId: string, userId: string) => !!GuildMemberStore?.getMember?.(guildId, userId);
+    //
+    // Memoized per (guildId, userId): a real GuildMemberStore.getMember() call
+    // sits behind this on every use, and both call sites (the bulk bot-icon
+    // override check, and the per-guild "hide all status" check) can ask the
+    // same question for the same pair repeatedly in a short burst — most
+    // visibly when one bot/webhook posts many consecutive messages, which
+    // reruns this same lookup once per message with no caching in between.
+    // Membership essentially never flips mid-session for what this answers,
+    // so a session-lifetime cache (never invalidated) is a safe trade: a
+    // member who leaves mid-session keeps their last-known answer here, which
+    // is a cosmetic staleness, not a correctness issue.
+    const realMemberCache = new Map<string, boolean>();
+    const isRealMember = (guildId: string, userId: string) => {
+        const key = `${guildId}:${userId}`;
+        let cached = realMemberCache.get(key);
+        if (cached === undefined) {
+            cached = !!GuildMemberStore?.getMember?.(guildId, userId);
+            realMemberCache.set(key, cached);
+        }
+        return cached;
+    };
 
     // getGuildIconURL/getGuildIconSource are typed on desktop as taking a
     // single { id, icon, ... } object, but that's unverified for this mobile
